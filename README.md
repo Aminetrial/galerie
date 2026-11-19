@@ -14,9 +14,10 @@ Barre du bas : **📁 Albums · 🎬 Vidéos · 🖼️ Photos · ⚙️ Réglag
 - Menu ⋮ → Sélectionner (ou appui long) : supprimer, déplacer, renommer plusieurs éléments
 - 🔍 recherche (albums + fichiers) · 🔀 lecture aléatoire
 
-**Lecteur** : barre du bas (vidéo seulement) : ⏪ -10 s · ⏸ Pause · +10 s ⏩ · ↻ Relancer · barre de progression · double-tap gauche/droite
-- Flèches ‹ › sur les côtés (ou glisser) : élément précédent / suivant dans l'ordre
-- En haut : ↶ Retour (élément vu juste avant) · 🔀 Aléatoire (sans répétition) · ⋮ Renommer / Supprimer
+**Lecteur vidéo plein écran** (commandes par-dessus la vidéo, masquées automatiquement)
+- Barre de progression avec temps · pastille du bas : 🔓 verrouiller · ⏮ précédent · -10 s · ⏯ · +10 s · ⏭ suivant · ⛶ image entière / plein écran rogné
+- Outils : 🔀 aléatoire sans répétition · ↶ retour (élément vu juste avant) · ↻ relancer · 🔊 muet · vitesse (1x, 1.25x, 1.5x, 2x, 0.5x, 0.75x) · PiP (image dans l'image) · 📷 capture d'image (Pictures/Captures)
+- Haut : ← retour · 🔄 rotation écran · ⋮ renommer / supprimer · double-tap gauche/droite = -10 s / +10 s · glisser = précédent/suivant
 
 ## Publier avec Termux
 

@@ -2,15 +2,23 @@ package com.galerie.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.widget.EditText;
-import java.util.List;
+import android.app.PictureInPictureParams;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
+import android.media.MediaMetadataRetriever;
+import android.media.MediaPlayer;
+import android.media.PlaybackParams;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
+import android.util.Rational;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -18,6 +26,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -27,21 +36,27 @@ import android.widget.Toast;
 import android.widget.VideoView;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Visionneuse photo + lecteur vidéo.
- * - Vidéo : -10 s, lecture/pause, +10 s, relancer, barre de progression.
- * - Navigation : précédent / suivant (ou glisser), aléatoire sans répétition,
- *   « Retour » qui revient à l'élément vu juste avant (historique).
+ * Visionneuse photo + lecteur vidéo plein écran (commandes par-dessus l'image).
+ *
+ * Vidéo : barre de progression, -10 s / +10 s, lecture/pause, relancer, vitesse, muet,
+ * capture d'image, image dans l'image, rotation, verrouillage, ajuster/remplir.
+ * Navigation : précédent / suivant (ordre de la liste), aléatoire sans répétition,
+ * « Retour » = revenir à l'élément vu juste avant.
  */
 public class ViewerActivity extends Activity {
 
     public static ArrayList<String> sPaths;
+
+    private static final float[] SPEEDS = {1f, 1.25f, 1.5f, 2f, 0.5f, 0.75f};
 
     private ArrayList<String> paths;
     private int index;
@@ -49,12 +64,23 @@ public class ViewerActivity extends Activity {
     private final ArrayDeque<String> history = new ArrayDeque<>();
     private final ArrayList<Integer> shuffleBag = new ArrayList<>();
 
+    private FrameLayout root;
     private ImageView imageView;
     private VideoView videoView;
-    private LinearLayout topBar, bottomBar, videoControls;
-    private TextView title, counter, timeText;
+    private LinearLayout topBar, bottom, toolRow, seekBlock;
+    private TextView title, counter, timeCur, timeTotal;
     private SeekBar seek;
-    private Button playBtn, prevBtn, nextBtn;
+    private Button playBtn, muteBtn, speedBtn, lockOverlay;
+    private View[] videoOnly;
+
+    private MediaPlayer player;
+    private int videoW = 0, videoH = 0;
+    private boolean aspectFill = false;
+    private boolean muted = false;
+    private int speedIdx = 0;
+    private boolean locked = false;
+    private boolean pipRequested = false;
+
     private boolean controlsVisible = true;
     private boolean userSeeking = false;
     private boolean isVideo = false;
@@ -74,7 +100,8 @@ public class ViewerActivity extends Activity {
                 if (dur > 0) {
                     seek.setMax(dur);
                     seek.setProgress(cur);
-                    timeText.setText(FileUtil.formatTime(cur) + " / " + FileUtil.formatTime(dur));
+                    timeCur.setText(FileUtil.formatTime(cur));
+                    timeTotal.setText(FileUtil.formatTime(dur));
                 }
             }
             h.postDelayed(this, 400);
@@ -82,7 +109,7 @@ public class ViewerActivity extends Activity {
     };
 
     private final Runnable autoHide = () -> {
-        if (isVideo && videoView.isPlaying()) setControlsVisible(false);
+        if (isVideo && videoView.isPlaying() && !userSeeking) setControlsVisible(false);
     };
 
     // ------------------------------------------------------------------ cycle de vie
@@ -97,6 +124,7 @@ public class ViewerActivity extends Activity {
             index = state.getInt("index", 0);
             resumePos = state.getInt("pos", -1);
             randomMode = state.getBoolean("random", false);
+            aspectFill = state.getBoolean("fill", false);
         } else {
             paths = sPaths;
             index = getIntent().getIntExtra("index", 0);
@@ -117,7 +145,7 @@ public class ViewerActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        if (isVideo) {
+        if (isVideo && !inPip()) {
             resumePos = videoView.getCurrentPosition();
             videoView.pause();
             updatePlayButton();
@@ -131,6 +159,7 @@ public class ViewerActivity extends Activity {
         out.putInt("index", index);
         out.putInt("pos", isVideo ? videoView.getCurrentPosition() : -1);
         out.putBoolean("random", randomMode);
+        out.putBoolean("fill", aspectFill);
     }
 
     @Override
@@ -141,21 +170,38 @@ public class ViewerActivity extends Activity {
         if (videoView != null) videoView.stopPlayback();
     }
 
+    @Override
+    public void onConfigurationChanged(Configuration c) {
+        super.onConfigurationChanged(c);
+        root.post(this::applyAspect);
+    }
+
+    private boolean inPip() {
+        return pipRequested || (Build.VERSION.SDK_INT >= 24 && isInPictureInPictureMode());
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean in, Configuration c) {
+        super.onPictureInPictureModeChanged(in, c);
+        pipRequested = in;
+        setControlsVisible(!in);
+    }
+
     // ------------------------------------------------------------------ interface
 
     private int dp(int v) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
     }
 
-    private Button btn(String text, View.OnClickListener l) {
+    private Button btn(String text, int sp, View.OnClickListener l) {
         Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
         b.setText(text);
         b.setAllCaps(false);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(13);
+        b.setTextSize(sp);
         b.setMinWidth(0);
         b.setMinimumWidth(0);
-        b.setPadding(dp(2), 0, dp(2), 0);
+        b.setPadding(0, 0, 0, 0);
         b.setOnClickListener(v -> {
             l.onClick(v);
             scheduleAutoHide();
@@ -163,12 +209,17 @@ public class ViewerActivity extends Activity {
         return b;
     }
 
-    private void addWeighted(LinearLayout row, View v) {
-        row.addView(v, new LinearLayout.LayoutParams(0, dp(48), 1));
+    private void addWeighted(LinearLayout row, View v, int heightDp) {
+        row.addView(v, new LinearLayout.LayoutParams(0, dp(heightDp), 1));
+    }
+
+    private GradientDrawable gradient(boolean fromTop) {
+        return new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                fromTop ? new int[]{0xCC000000, 0x00000000} : new int[]{0x00000000, 0xCC000000});
     }
 
     private void buildUi() {
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
 
         imageView = new ImageView(this);
@@ -178,14 +229,13 @@ public class ViewerActivity extends Activity {
         videoView = new VideoView(this);
         root.addView(videoView, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
 
-        // --- barre du haut
+        // --- barre du haut : ← titre compteur 🔄 ⋮
         topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundColor(0xAA000000);
-        topBar.setPadding(dp(4), dp(4), dp(12), dp(4));
-        Button close = btn("✕", v -> finish());
-        topBar.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        topBar.setBackground(gradient(true));
+        topBar.setPadding(dp(4), dp(4), dp(8), dp(16));
+        topBar.addView(btn("←", 24, v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
         title = new TextView(this);
         title.setTextColor(Color.WHITE);
         title.setTextSize(14);
@@ -195,61 +245,113 @@ public class ViewerActivity extends Activity {
         counter = new TextView(this);
         counter.setTextColor(0xFFBDBDBD);
         counter.setTextSize(13);
+        counter.setPadding(dp(8), 0, dp(4), 0);
         topBar.addView(counter);
-        topBar.addView(btn("↶", v -> goBackInHistory()), new LinearLayout.LayoutParams(dp(44), dp(48)));
-        topBar.addView(btn("🔀", v -> randomJump()), new LinearLayout.LayoutParams(dp(44), dp(48)));
-        topBar.addView(btn("⋮", v -> showMenu()), new LinearLayout.LayoutParams(dp(36), dp(48)));
+        topBar.addView(btn("🔄", 18, v -> rotate()), new LinearLayout.LayoutParams(dp(44), dp(48)));
+        topBar.addView(btn("⋮", 22, v -> showMenu()), new LinearLayout.LayoutParams(dp(36), dp(48)));
         root.addView(topBar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
-        // --- flèches précédent / suivant sur les côtés
-        prevBtn = btn("‹", v -> prev());
-        prevBtn.setTextSize(32);
-        prevBtn.setBackgroundColor(0x44000000);
-        root.addView(prevBtn, new FrameLayout.LayoutParams(dp(40), dp(96), Gravity.START | Gravity.CENTER_VERTICAL));
-        nextBtn = btn("›", v -> next());
-        nextBtn.setTextSize(32);
-        nextBtn.setBackgroundColor(0x44000000);
-        root.addView(nextBtn, new FrameLayout.LayoutParams(dp(40), dp(96), Gravity.END | Gravity.CENTER_VERTICAL));
+        // --- bas : outils, progression, barre principale
+        bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.VERTICAL);
+        bottom.setBackground(gradient(false));
+        bottom.setPadding(dp(10), dp(24), dp(10), dp(10));
 
-        // --- barre du bas
-        bottomBar = new LinearLayout(this);
-        bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setBackgroundColor(0xAA000000);
-        bottomBar.setPadding(dp(4), dp(4), dp(4), dp(8));
+        toolRow = new LinearLayout(this);
+        toolRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button randBtn = btn("🔀", 18, v -> randomJump());
+        Button backBtn = btn("↶", 22, v -> goBackInHistory());
+        Button restartBtn = btn("↻", 22, v -> restart());
+        muteBtn = btn("🔊", 18, v -> toggleMute());
+        speedBtn = btn("1x", 14, v -> cycleSpeed());
+        speedBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        Button pipBtn = btn("PiP", 12, v -> enterPip());
+        pipBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        Button capBtn = btn("📷", 18, v -> capture());
+        addWeighted(toolRow, randBtn, 44);
+        addWeighted(toolRow, backBtn, 44);
+        addWeighted(toolRow, restartBtn, 44);
+        addWeighted(toolRow, muteBtn, 44);
+        addWeighted(toolRow, speedBtn, 44);
+        addWeighted(toolRow, pipBtn, 44);
+        addWeighted(toolRow, capBtn, 44);
+        bottom.addView(toolRow);
 
-        videoControls = new LinearLayout(this);
-        videoControls.setOrientation(LinearLayout.VERTICAL);
-
-        LinearLayout seekRow = new LinearLayout(this);
-        seekRow.setOrientation(LinearLayout.HORIZONTAL);
-        seekRow.setGravity(Gravity.CENTER_VERTICAL);
+        seekBlock = new LinearLayout(this);
+        seekBlock.setOrientation(LinearLayout.VERTICAL);
         seek = new SeekBar(this);
-        seekRow.addView(seek, new LinearLayout.LayoutParams(0, -2, 1));
-        timeText = new TextView(this);
-        timeText.setTextColor(Color.WHITE);
-        timeText.setTextSize(12);
-        timeText.setPadding(dp(4), 0, dp(8), 0);
-        timeText.setText("0:00 / 0:00");
-        seekRow.addView(timeText);
-        videoControls.addView(seekRow);
+        seekBlock.addView(seek, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout times = new LinearLayout(this);
+        times.setOrientation(LinearLayout.HORIZONTAL);
+        times.setPadding(dp(14), 0, dp(14), dp(6));
+        timeCur = new TextView(this);
+        timeCur.setTextColor(0xFFE0E0E0);
+        timeCur.setTextSize(12);
+        timeCur.setText("0:00");
+        timeTotal = new TextView(this);
+        timeTotal.setTextColor(0xFFE0E0E0);
+        timeTotal.setTextSize(12);
+        timeTotal.setGravity(Gravity.END);
+        timeTotal.setText("0:00");
+        times.addView(timeCur, new LinearLayout.LayoutParams(0, -2, 1));
+        times.addView(timeTotal, new LinearLayout.LayoutParams(0, -2, 1));
+        seekBlock.addView(times);
+        bottom.addView(seekBlock);
 
-        LinearLayout vRow = new LinearLayout(this);
-        vRow.setOrientation(LinearLayout.HORIZONTAL);
-        addWeighted(vRow, btn("⏪ -10 s", v -> skip(-10000)));
-        playBtn = btn("⏸ Pause", v -> togglePlay());
-        addWeighted(vRow, playBtn);
-        addWeighted(vRow, btn("+10 s ⏩", v -> skip(10000)));
-        addWeighted(vRow, btn("↻ Relancer", v -> restart()));
-        videoControls.addView(vRow);
-        bottomBar.addView(videoControls);
+        LinearLayout pill = new LinearLayout(this);
+        pill.setOrientation(LinearLayout.HORIZONTAL);
+        pill.setGravity(Gravity.CENTER_VERTICAL);
+        pill.setPadding(dp(6), dp(2), dp(6), dp(2));
+        GradientDrawable pg = new GradientDrawable();
+        pg.setColor(0xDD1E1E1E);
+        pg.setCornerRadius(dp(30));
+        pill.setBackground(pg);
+        Button lockBtn = btn("🔓", 18, v -> toggleLock());
+        Button prevBtn = btn("⏮", 20, v -> prev());
+        Button backSkip = btn("-10 s", 13, v -> skip(-10000));
+        playBtn = btn("⏸", 24, v -> togglePlay());
+        Button fwdSkip = btn("+10 s", 13, v -> skip(10000));
+        Button nextBtn = btn("⏭", 20, v -> next());
+        Button aspectBtn = btn("⛶", 20, v -> toggleAspect());
+        addWeighted(pill, lockBtn, 48);
+        addWeighted(pill, prevBtn, 48);
+        addWeighted(pill, backSkip, 48);
+        addWeighted(pill, playBtn, 48);
+        addWeighted(pill, fwdSkip, 48);
+        addWeighted(pill, nextBtn, 48);
+        addWeighted(pill, aspectBtn, 48);
+        bottom.addView(pill, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(bottom, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
-        root.addView(bottomBar, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        videoOnly = new View[]{restartBtn, muteBtn, speedBtn, pipBtn, capBtn, backSkip, playBtn, fwdSkip};
+
+        // --- bouton de déverrouillage (visible seulement quand l'écran est verrouillé)
+        lockOverlay = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        lockOverlay.setText("🔒");
+        lockOverlay.setTextSize(18);
+        lockOverlay.setMinWidth(0);
+        lockOverlay.setMinimumWidth(0);
+        lockOverlay.setPadding(0, 0, 0, 0);
+        GradientDrawable lg = new GradientDrawable();
+        lg.setShape(GradientDrawable.OVAL);
+        lg.setColor(0x99000000);
+        lockOverlay.setBackground(lg);
+        lockOverlay.setOnClickListener(v -> toggleLock());
+        lockOverlay.setVisibility(View.GONE);
+        FrameLayout.LayoutParams ll = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.BOTTOM | Gravity.START);
+        ll.setMargins(dp(16), 0, 0, dp(28));
+        root.addView(lockOverlay, ll);
+
         setContentView(root);
+
+        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) applyAspect();
+        });
 
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
-                if (fromUser) timeText.setText(FileUtil.formatTime(p) + " / " + FileUtil.formatTime(s.getMax()));
+                if (fromUser) timeCur.setText(FileUtil.formatTime(p));
             }
 
             @Override
@@ -267,12 +369,23 @@ public class ViewerActivity extends Activity {
         });
 
         videoView.setOnPreparedListener(mp -> {
+            player = mp;
+            videoW = mp.getVideoWidth();
+            videoH = mp.getVideoHeight();
+            mp.setOnVideoSizeChangedListener((m, w, hh) -> {
+                videoW = w;
+                videoH = hh;
+                applyAspect();
+            });
+            applyAspect();
             seek.setMax(Math.max(0, videoView.getDuration()));
+            if (muted) mp.setVolume(0f, 0f);
             if (resumePos > 0) {
                 videoView.seekTo(resumePos);
                 resumePos = -1;
             }
             videoView.start();
+            applySpeed();
             updatePlayButton();
             scheduleAutoHide();
         });
@@ -289,16 +402,61 @@ public class ViewerActivity extends Activity {
 
     private void setControlsVisible(boolean v) {
         controlsVisible = v;
+        if (locked) {
+            topBar.setVisibility(View.GONE);
+            bottom.setVisibility(View.GONE);
+            lockOverlay.setVisibility(View.VISIBLE);
+            return;
+        }
+        lockOverlay.setVisibility(View.GONE);
         topBar.setVisibility(v ? View.VISIBLE : View.GONE);
-        prevBtn.setVisibility(v ? View.VISIBLE : View.GONE);
-        nextBtn.setVisibility(v ? View.VISIBLE : View.GONE);
-        bottomBar.setVisibility(v && isVideo ? View.VISIBLE : View.GONE);
+        bottom.setVisibility(v ? View.VISIBLE : View.GONE);
         if (v) scheduleAutoHide();
     }
 
     private void scheduleAutoHide() {
         h.removeCallbacks(autoHide);
-        h.postDelayed(autoHide, 4000);
+        if (isVideo) h.postDelayed(autoHide, 4000);
+    }
+
+    private void toggleLock() {
+        locked = !locked;
+        Toast.makeText(this, locked ? "Écran verrouillé" : "Écran déverrouillé", Toast.LENGTH_SHORT).show();
+        setControlsVisible(true);
+    }
+
+    // ------------------------------------------------------------------ affichage : ajuster / remplir / rotation
+
+    private void applyAspect() {
+        if (root == null) return;
+        imageView.setScaleType(aspectFill ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER);
+        int W = root.getWidth(), H = root.getHeight();
+        if (W == 0 || H == 0) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) videoView.getLayoutParams();
+        int nw = -1, nh = -1;
+        if (aspectFill && videoW > 0 && videoH > 0) {
+            float s = Math.max((float) W / videoW, (float) H / videoH);
+            nw = Math.round(videoW * s);
+            nh = Math.round(videoH * s);
+        }
+        if (lp.width != nw || lp.height != nh) {
+            lp.width = nw;
+            lp.height = nh;
+            lp.gravity = Gravity.CENTER;
+            videoView.setLayoutParams(lp);
+        }
+    }
+
+    private void toggleAspect() {
+        aspectFill = !aspectFill;
+        applyAspect();
+        Toast.makeText(this, aspectFill ? "Plein écran (rogné)" : "Image entière", Toast.LENGTH_SHORT).show();
+    }
+
+    private void rotate() {
+        boolean land = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+        setRequestedOrientation(land ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                : ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
     }
 
     // ------------------------------------------------------------------ gestes
@@ -310,11 +468,12 @@ public class ViewerActivity extends Activity {
     }
 
     private boolean onControls(MotionEvent e) {
-        return inside(topBar, e) || inside(bottomBar, e) || inside(prevBtn, e) || inside(nextBtn, e);
+        return inside(topBar, e) || inside(bottom, e) || inside(lockOverlay, e);
     }
 
     private void showMenu() {
         if (isVideo) videoView.pause();
+        updatePlayButton();
         new AlertDialog.Builder(this)
                 .setItems(new String[]{"✏️  Renommer", "🗑️  Supprimer"}, (d, w) -> {
                     if (w == 0) renameCurrent(); else deleteCurrent();
@@ -332,13 +491,17 @@ public class ViewerActivity extends Activity {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
                 if (onControls(e)) return false;
+                if (locked) {
+                    lockOverlay.setVisibility(View.VISIBLE);
+                    return true;
+                }
                 setControlsVisible(!controlsVisible);
                 return true;
             }
 
             @Override
             public boolean onDoubleTap(MotionEvent e) {
-                if (!isVideo || onControls(e)) return false;
+                if (locked || !isVideo || onControls(e)) return false;
                 // double-tap côté gauche = -10 s, côté droit = +10 s
                 int w = getResources().getDisplayMetrics().widthPixels;
                 skip(e.getRawX() < w / 2f ? -10000 : 10000);
@@ -347,7 +510,7 @@ public class ViewerActivity extends Activity {
 
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
-                if (e1 == null || onControls(e1)) return false;
+                if (locked || e1 == null || onControls(e1)) return false;
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > dp(80)) {
@@ -369,7 +532,17 @@ public class ViewerActivity extends Activity {
         return super.dispatchTouchEvent(ev);
     }
 
-    // ------------------------------------------------------------------ affichage
+    @Override
+    public void onBackPressed() {
+        if (locked) {
+            Toast.makeText(this, "Écran verrouillé : touchez 🔒 pour déverrouiller", Toast.LENGTH_SHORT).show();
+            lockOverlay.setVisibility(View.VISIBLE);
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    // ------------------------------------------------------------------ affichage d'un élément
 
     private void show(int i) {
         index = i;
@@ -378,24 +551,34 @@ public class ViewerActivity extends Activity {
         title.setText(f.getName());
         counter.setText((i + 1) + " / " + paths.size());
         final int token = ++loadToken;
+        boolean vid = FileUtil.isVideo(f);
+        for (View v : videoOnly) v.setVisibility(vid ? View.VISIBLE : View.GONE);
+        seekBlock.setVisibility(vid ? View.VISIBLE : View.GONE);
 
-        if (FileUtil.isVideo(f)) {
+        if (vid) {
             isVideo = true;
+            player = null;
+            videoW = 0;
+            videoH = 0;
+            speedIdx = 0;
+            speedBtn.setText("1x");
             imageView.setImageDrawable(null);
             imageView.setVisibility(View.GONE);
-            videoControls.setVisibility(View.VISIBLE);
             videoView.setVisibility(View.VISIBLE);
             seek.setProgress(0);
-            timeText.setText("0:00 / 0:00");
+            timeCur.setText("0:00");
+            timeTotal.setText("0:00");
+            applyAspect();
             videoView.setVideoPath(p);
             updatePlayButton();
         } else {
             isVideo = false;
+            player = null;
             videoView.stopPlayback();
             videoView.setVisibility(View.GONE);
-            videoControls.setVisibility(View.GONE);
             imageView.setVisibility(View.VISIBLE);
             imageView.setImageDrawable(null);
+            applyAspect();
             DisplayMetrics dm = getResources().getDisplayMetrics();
             final int req = Math.max(dm.widthPixels, dm.heightPixels);
             loader.execute(() -> {
@@ -448,10 +631,6 @@ public class ViewerActivity extends Activity {
     }
 
     private void goBackInHistory() {
-        if (history.isEmpty()) {
-            Toast.makeText(this, "Aucun élément précédent dans l'historique", Toast.LENGTH_SHORT).show();
-            return;
-        }
         while (!history.isEmpty()) {
             int i = paths.indexOf(history.pop());
             if (i >= 0) { show(i); return; }
@@ -472,7 +651,6 @@ public class ViewerActivity extends Activity {
         FrameLayout box = new FrameLayout(this);
         box.setPadding(dp(20), dp(8), dp(20), 0);
         box.addView(et);
-        if (isVideo) videoView.pause();
         new AlertDialog.Builder(this)
                 .setTitle("Renommer")
                 .setView(box)
@@ -500,7 +678,6 @@ public class ViewerActivity extends Activity {
 
     private void deleteCurrent() {
         final String p = paths.get(index);
-        if (isVideo) videoView.pause();
         new AlertDialog.Builder(this)
                 .setTitle("Supprimer ?")
                 .setMessage("« " + new File(p).getName() + " » sera supprimé définitivement.")
@@ -552,6 +729,100 @@ public class ViewerActivity extends Activity {
     }
 
     private void updatePlayButton() {
-        h.postDelayed(() -> playBtn.setText(videoView.isPlaying() ? "⏸ Pause" : "▶ Lecture"), 100);
+        h.postDelayed(() -> playBtn.setText(videoView.isPlaying() ? "⏸" : "▶"), 100);
+    }
+
+    private void toggleMute() {
+        muted = !muted;
+        if (player != null) {
+            try { player.setVolume(muted ? 0f : 1f, muted ? 0f : 1f); } catch (Exception ignored) { }
+        }
+        muteBtn.setText(muted ? "🔇" : "🔊");
+    }
+
+    private void cycleSpeed() {
+        speedIdx = (speedIdx + 1) % SPEEDS.length;
+        applySpeed();
+    }
+
+    private void applySpeed() {
+        float sp = SPEEDS[speedIdx];
+        String label = (sp == (int) sp ? String.valueOf((int) sp) : String.valueOf(sp)) + "x";
+        speedBtn.setText(label);
+        if (player == null) return;
+        boolean wasPlaying = videoView.isPlaying();
+        try {
+            PlaybackParams pp = new PlaybackParams();
+            pp.setSpeed(sp);
+            player.setPlaybackParams(pp);
+            if (!wasPlaying) videoView.pause(); // changer la vitesse peut relancer la lecture
+        } catch (Exception e) {
+            Toast.makeText(this, "Vitesse non disponible pour cette vidéo", Toast.LENGTH_SHORT).show();
+        }
+        updatePlayButton();
+    }
+
+    private void enterPip() {
+        if (!isVideo) return;
+        if (Build.VERSION.SDK_INT < 26) {
+            Toast.makeText(this, "Image dans l'image : Android 8 minimum", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            float a = videoW > 0 && videoH > 0 ? (float) videoW / videoH : 16f / 9f;
+            a = Math.max(0.42f, Math.min(2.38f, a));
+            pipRequested = true;
+            enterPictureInPictureMode(new PictureInPictureParams.Builder()
+                    .setAspectRatio(new Rational(Math.round(a * 1000), 1000)).build());
+        } catch (Exception e) {
+            pipRequested = false;
+            Toast.makeText(this, "Image dans l'image indisponible", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** Enregistre l'image affichée dans Pictures/Captures. */
+    @SuppressWarnings("deprecation")
+    private void capture() {
+        if (!isVideo) return;
+        final String p = paths.get(index);
+        final long posMs = videoView.getCurrentPosition();
+        loader.execute(() -> {
+            String res = null;
+            MediaMetadataRetriever mr = new MediaMetadataRetriever();
+            try {
+                mr.setDataSource(p);
+                Bitmap bm = mr.getFrameAtTime(posMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST);
+                if (bm != null) {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Captures");
+                    dir.mkdirs();
+                    String base = new File(p).getName();
+                    int dot = base.lastIndexOf('.');
+                    if (dot > 0) base = base.substring(0, dot);
+                    File out = FileUtil.uniqueFile(dir, base + "_" + FileUtil.formatTime((int) posMs).replace(':', '-') + ".jpg");
+                    try (FileOutputStream fo = new FileOutputStream(out)) {
+                        bm.compress(Bitmap.CompressFormat.JPEG, 95, fo);
+                    }
+                    res = out.getAbsolutePath();
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                try { mr.release(); } catch (Throwable ignored) { }
+            }
+            final String path = res;
+            h.post(() -> {
+                if (path == null) {
+                    Toast.makeText(this, "Capture impossible", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                MediaRepo repo = MediaRepo.get();
+                repo.all.add(0, new MediaItem(-1, path, System.currentTimeMillis(), false, 0));
+                repo.rebuildAlbums(this);
+                repo.dirty = true;
+                List<String> one = new ArrayList<>();
+                one.add(path);
+                MediaRepo.scan(this, one);
+                Toast.makeText(this, "Image enregistrée dans Pictures/Captures", Toast.LENGTH_SHORT).show();
+            });
+        });
     }
 }

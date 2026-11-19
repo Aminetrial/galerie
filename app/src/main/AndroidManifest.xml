@@ -27,6 +27,7 @@
             android:name=".ViewerActivity"
             android:exported="false"
             android:theme="@style/ViewerTheme"
+            android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
     </application>
 </manifest>
