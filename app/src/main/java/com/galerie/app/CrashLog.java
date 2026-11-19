@@ -28,6 +28,18 @@ public final class CrashLog {
     private CrashLog() { }
 
     private static File internal;
+    public static volatile long maxStall = 0;
+
+    /** Dernières lignes du journal (pour l'affichage à l'écran). */
+    public static String tail(int n) {
+        String t = read();
+        String[] l = t.split("\n");
+        StringBuilder sb = new StringBuilder();
+        for (int i = Math.max(0, l.length - n); i < l.length; i++) sb.append(l[i]).append('\n');
+        return sb.toString();
+    }
+
+    public static void note(String text) { write(text); }
 
     /** Texte du journal (pour l'écran Réglages). */
     public static String read() {
@@ -84,7 +96,7 @@ public final class CrashLog {
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
             StringWriter sw = new StringWriter();
             e.printStackTrace(new PrintWriter(sw));
-            write("PLANTAGE (fil " + t.getName() + ")\n" + sw);
+            writeNow("PLANTAGE (fil " + t.getName() + ")\n" + sw);
             if (old != null) old.uncaughtException(t, e);
         });
 
@@ -101,6 +113,7 @@ public final class CrashLog {
             while (true) {
                 try { Thread.sleep(500); } catch (InterruptedException e) { return; }
                 long now = System.currentTimeMillis();
+                if (now - lastTick > maxStall) maxStall = now - lastTick;
                 if (now - lastTick > 2500) {
                     if (!reported) {
                         reported = true;
@@ -135,7 +148,13 @@ public final class CrashLog {
         }
     }
 
-    private static void write(String text) {
+    private static final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    private static void write(final String text) {
+        io.execute(() -> writeNow(text));
+    }
+
+    private static void writeNow(String text) {
         String stamp = "=== " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()) + " ===\n" + text + "\n";
         try {
             if (internal != null) try (FileWriter w = new FileWriter(internal, true)) { w.write(stamp); }

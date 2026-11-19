@@ -128,6 +128,9 @@ public class MainActivity extends Activity {
     private ScrollView settingsView;
     private ProgressBar progress;
     private LinearLayout permissionView;
+    private TextView debugBanner;
+    private int touches = 0;
+    private long t0 = System.currentTimeMillis();
     private final LinearLayout[] navItems = new LinearLayout[4];
 
     // réglages (lignes)
@@ -144,6 +147,25 @@ public class MainActivity extends Activity {
         rebuildRows();
         glm.scrollToPosition(0);
     };
+
+    private final Runnable bannerTick = new Runnable() {
+        @Override
+        public void run() {
+            if (debugBanner != null && debugBanner.getVisibility() == View.VISIBLE) {
+                String tail = CrashLog.tail(26);
+                debugBanner.setText("v19 perm=" + (permissionView.getVisibility() == View.VISIBLE ? "NON" : "OK") + " items=" + repo.all.size()
+                        + " lignes=" + rows.size() + " chargement=" + loading + " touches=" + touches
+                        + " blocageMax=" + CrashLog.maxStall + "ms vie=" + ((System.currentTimeMillis() - t0) / 1000) + "s\n" + tail);
+            }
+            ui.postDelayed(this, 500);
+        }
+    };
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) touches++;
+        return super.dispatchTouchEvent(ev);
+    }
 
     // ================================================================== cycle de vie
 
@@ -170,8 +192,10 @@ public class MainActivity extends Activity {
             openAlbum = state.getString("album");
             filter = state.getInt("filter", F_ALL);
         }
+        CrashLog.note("onCreate : début interface");
         buildUi();
         buildSettings();
+        CrashLog.note("onCreate : interface construite");
     }
 
     @Override
@@ -273,10 +297,12 @@ public class MainActivity extends Activity {
             }
             final List<MediaItem> res = list;
             post(() -> {
+                CrashLog.note("scan terminé : " + res.size() + " éléments");
                 repo.set(this, res);
                 loading = false;
                 progress.setVisibility(View.GONE);
                 rebuildRows();
+                CrashLog.note("rebuildRows terminé : " + rows.size() + " lignes");
             });
         });
     }
@@ -373,6 +399,18 @@ public class MainActivity extends Activity {
                 new LinearLayout.LayoutParams(dp(48), dp(48)));
         topFrame.addView(selectBar, new FrameLayout.LayoutParams(-1, -1));
         showBar(BAR_NORMAL);
+
+        // --- bandeau de diagnostic (temporaire) : prouve que l'interface est vivante
+        debugBanner = new TextView(this);
+        debugBanner.setTextColor(0xFFFFFFFF);
+        debugBanner.setBackgroundColor(0xFF7A1F1F);
+        debugBanner.setTextSize(8);
+        debugBanner.setMaxLines(30);
+        debugBanner.setTypeface(Typeface.MONOSPACE);
+        debugBanner.setPadding(dp(6), dp(2), dp(6), dp(2));
+        debugBanner.setOnClickListener(v -> debugBanner.setVisibility(View.GONE));
+        root.addView(debugBanner, new LinearLayout.LayoutParams(-1, -2));
+        ui.post(bannerTick);
 
         // --- filtres Tout / Photos / Vidéos (dans un album de l'onglet Albums)
         chipsRow = new LinearLayout(this);
