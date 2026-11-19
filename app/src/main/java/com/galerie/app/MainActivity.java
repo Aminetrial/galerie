@@ -18,7 +18,10 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.SpannableString;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
 import android.util.TypedValue;
 import android.view.ActionMode;
 import android.view.Gravity;
@@ -32,6 +35,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -54,12 +58,13 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
 
-    // onglets
-    private static final int TAB_PHOTOS = 0, TAB_ALBUMS = 1;
-    // types de lignes de la grille
+    // onglets (barre du bas)
+    private static final int TAB_ALBUMS = 0, TAB_VIDEOS = 1, TAB_PHOTOS = 2, TAB_SETTINGS = 3;
+    private static final String[] TAB_NAMES = {"Albums", "Vidéos", "Photos", "Réglages"};
+    // types de lignes
     private static final int T_HEADER = 0, T_MEDIA = 1, T_ALBUM = 2;
     private static final int SPAN = 12;
-    // filtres
+    // filtres (dans un album de l'onglet Albums)
     private static final int F_ALL = 0, F_PHOTOS = 1, F_VIDEOS = 2;
 
     private static class Row {
@@ -67,16 +72,21 @@ public class MainActivity extends Activity {
         String text;
         MediaItem media;
         MediaRepo.Album album;
+        MediaItem cover;
+        int count;
 
         Row(int type) { this.type = type; }
     }
 
-    private int tab = TAB_PHOTOS;
+    private int tab = TAB_ALBUMS;
     private String openAlbum = null;
     private String query = "";
     private int filter = F_ALL;
     private int cols = 4;
-    private final int[] savedScroll = new int[2];
+    private boolean includeVideos = false;  // onglet Photos : inclure les vidéos
+    private boolean photosFolders = false;  // onglet Photos : vue par dossiers (sinon grille)
+    private boolean videosFolders = true;   // onglet Vidéos : vue par dossiers (sinon grille)
+    private final int[] savedScroll = new int[4];
 
     private MediaRepo repo;
     private ThumbLoader thumbs;
@@ -90,7 +100,9 @@ public class MainActivity extends Activity {
     private GridAdapter adapter;
     private LinearLayout chipsRow;
     private final TextView[] chips = new TextView[3];
-    private TextView navPhotos, navAlbums;
+    private final TextView[] navItems = new TextView[4];
+    private ScrollView settingsView;
+    private final TextView[] setRows = new TextView[6];
     private TextView emptyView;
     private ProgressBar progress;
     private LinearLayout permissionView;
@@ -117,9 +129,13 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         repo = MediaRepo.get();
         thumbs = new ThumbLoader(this);
-        cols = prefs().getInt("cols", 4);
+        SharedPreferences p = prefs();
+        cols = p.getInt("cols", 4);
+        includeVideos = p.getBoolean("inc_video", false);
+        photosFolders = p.getBoolean("photos_folders", false);
+        videosFolders = p.getBoolean("videos_folders", true);
         if (state != null) {
-            tab = state.getInt("tab", TAB_PHOTOS);
+            tab = state.getInt("tab", TAB_ALBUMS);
             openAlbum = state.getString("album");
             filter = state.getInt("filter", F_ALL);
         }
@@ -140,7 +156,7 @@ public class MainActivity extends Activity {
         else if (repo.dirty) {
             repo.dirty = false;
             rebuildRows();
-        }
+        } else rebuildRows();
     }
 
     @Override
@@ -208,7 +224,7 @@ public class MainActivity extends Activity {
         progress.setVisibility(View.GONE);
         main.addView(progress, new LinearLayout.LayoutParams(-1, dp(4)));
 
-        // filtres Tout / Photos / Vidéos
+        // filtres Tout / Photos / Vidéos (dans un album de l'onglet Albums)
         chipsRow = new LinearLayout(this);
         chipsRow.setOrientation(LinearLayout.HORIZONTAL);
         chipsRow.setPadding(dp(8), dp(6), dp(8), dp(6));
@@ -231,7 +247,7 @@ public class MainActivity extends Activity {
         }
         main.addView(chipsRow, new LinearLayout.LayoutParams(-1, -2));
 
-        // grille
+        // contenu : grille/liste + réglages
         FrameLayout gridBox = new FrameLayout(this);
         rv = new RecyclerView(this);
         glm = new GridLayoutManager(this, SPAN);
@@ -239,10 +255,7 @@ public class MainActivity extends Activity {
             @Override
             public int getSpanSize(int position) {
                 if (position < 0 || position >= rows.size()) return SPAN;
-                int t = rows.get(position).type;
-                if (t == T_MEDIA) return SPAN / cols;
-                if (t == T_ALBUM) return SPAN / 2;
-                return SPAN;
+                return rows.get(position).type == T_MEDIA ? SPAN / cols : SPAN;
             }
         });
         rv.setLayoutManager(glm);
@@ -260,16 +273,25 @@ public class MainActivity extends Activity {
         emptyView.setPadding(dp(32), 0, dp(32), 0);
         emptyView.setVisibility(View.GONE);
         gridBox.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
+
+        buildSettings(gridBox);
         main.addView(gridBox, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        // barre du bas : Photos | Albums
+        // barre du bas : Albums | Vidéos | Photos | Réglages
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setBackgroundColor(0xFF1A1A1A);
-        navPhotos = navButton("🖼️\nPhotos", v -> setTab(TAB_PHOTOS));
-        navAlbums = navButton("📁\nAlbums", v -> setTab(TAB_ALBUMS));
-        nav.addView(navPhotos, new LinearLayout.LayoutParams(0, dp(60), 1));
-        nav.addView(navAlbums, new LinearLayout.LayoutParams(0, dp(60), 1));
+        String[] navLabels = {"📁\nAlbums", "🎬\nVidéos", "🖼️\nPhotos", "⚙️\nRéglages"};
+        for (int i = 0; i < 4; i++) {
+            final int t = i;
+            TextView n = new TextView(this);
+            n.setText(navLabels[i]);
+            n.setGravity(Gravity.CENTER);
+            n.setTextSize(12);
+            n.setOnClickListener(v -> setTab(t));
+            nav.addView(n, new LinearLayout.LayoutParams(0, dp(60), 1));
+            navItems[i] = n;
+        }
         main.addView(nav, new LinearLayout.LayoutParams(-1, -2));
 
         root.addView(main, new FrameLayout.LayoutParams(-1, -1));
@@ -279,6 +301,7 @@ public class MainActivity extends Activity {
         permissionView.setOrientation(LinearLayout.VERTICAL);
         permissionView.setGravity(Gravity.CENTER);
         permissionView.setPadding(dp(32), dp(32), dp(32), dp(32));
+        permissionView.setBackgroundColor(0xFF121212);
         TextView msg = new TextView(this);
         msg.setText("La galerie a besoin d'accéder à vos fichiers pour afficher, renommer, déplacer et supprimer vos photos et vidéos.");
         msg.setTextColor(Color.WHITE);
@@ -296,18 +319,57 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
-    private TextView navButton(String text, View.OnClickListener l) {
-        TextView t = new TextView(this);
-        t.setText(text);
-        t.setGravity(Gravity.CENTER);
-        t.setTextSize(12);
-        t.setOnClickListener(l);
-        return t;
+    private void buildSettings(FrameLayout parent) {
+        settingsView = new ScrollView(this);
+        settingsView.setBackgroundColor(0xFF121212);
+        settingsView.setVisibility(View.GONE);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(0, dp(8), 0, dp(16));
+        View.OnClickListener[] actions = {
+                v -> chooseColumns(),
+                v -> { includeVideos = !includeVideos; prefs().edit().putBoolean("inc_video", includeVideos).apply(); refreshSettings(); },
+                v -> { photosFolders = !photosFolders; prefs().edit().putBoolean("photos_folders", photosFolders).apply(); refreshSettings(); },
+                v -> { videosFolders = !videosFolders; prefs().edit().putBoolean("videos_folders", videosFolders).apply(); refreshSettings(); },
+                v -> createAlbum(),
+                v -> reload()
+        };
+        for (int i = 0; i < setRows.length; i++) {
+            TextView t = new TextView(this);
+            t.setTextColor(Color.WHITE);
+            t.setTextSize(16);
+            t.setPadding(dp(20), dp(14), dp(20), dp(14));
+            t.setOnClickListener(actions[i]);
+            list.addView(t, new LinearLayout.LayoutParams(-1, -2));
+            setRows[i] = t;
+        }
+        settingsView.addView(list);
+        parent.addView(settingsView, new FrameLayout.LayoutParams(-1, -1));
+        refreshSettings();
+    }
+
+    private void setRow(TextView t, String title, String value) {
+        SpannableString sp = new SpannableString(title + "\n" + value);
+        int st = title.length() + 1;
+        sp.setSpan(new ForegroundColorSpan(0xFF9E9E9E), st, sp.length(), 0);
+        sp.setSpan(new RelativeSizeSpan(0.85f), st, sp.length(), 0);
+        t.setText(sp);
+    }
+
+    private void refreshSettings() {
+        setRow(setRows[0], "Taille de la grille", cols + " éléments par ligne");
+        setRow(setRows[1], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
+        setRow(setRows[2], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille (tout, par date)");
+        setRow(setRows[3], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille (tout, par date)");
+        setRow(setRows[4], "Nouvel album", "Créer un dossier dans Pictures");
+        setRow(setRows[5], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
     }
 
     private void styleChrome() {
-        boolean albumsList = tab == TAB_ALBUMS && openAlbum == null && query.isEmpty();
-        chipsRow.setVisibility(albumsList ? View.GONE : View.VISIBLE);
+        boolean settings = tab == TAB_SETTINGS;
+        settingsView.setVisibility(settings ? View.VISIBLE : View.GONE);
+        rv.setVisibility(settings ? View.GONE : View.VISIBLE);
+        chipsRow.setVisibility(tab == TAB_ALBUMS && openAlbum != null && query.isEmpty() ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 3; i++) {
             GradientDrawable bgd = new GradientDrawable();
             bgd.setCornerRadius(dp(18));
@@ -321,18 +383,16 @@ public class MainActivity extends Activity {
             }
             chips[i].setBackground(bgd);
         }
-        boolean photosActive = tab == TAB_PHOTOS;
-        navPhotos.setTextColor(photosActive ? 0xFF42A5F5 : 0xFF9E9E9E);
-        navAlbums.setTextColor(!photosActive ? 0xFF42A5F5 : 0xFF9E9E9E);
-        navPhotos.setTypeface(null, photosActive ? Typeface.BOLD : Typeface.NORMAL);
-        navAlbums.setTypeface(null, !photosActive ? Typeface.BOLD : Typeface.NORMAL);
-
+        for (int i = 0; i < 4; i++) {
+            navItems[i].setTextColor(i == tab ? 0xFF42A5F5 : 0xFF9E9E9E);
+            navItems[i].setTypeface(null, i == tab ? Typeface.BOLD : Typeface.NORMAL);
+        }
         ActionBar ab = getActionBar();
         if (ab != null) {
             MediaRepo.Album a = openAlbum != null ? repo.album(openAlbum) : null;
             if (!query.isEmpty()) ab.setTitle("Recherche");
             else if (a != null) ab.setTitle(a.name);
-            else ab.setTitle(tab == TAB_PHOTOS ? "Photos" : "Albums");
+            else ab.setTitle(TAB_NAMES[tab]);
             ab.setSubtitle(a != null && query.isEmpty() ? a.countLabel() : null);
             ab.setDisplayHomeAsUpEnabled(openAlbum != null);
         }
@@ -341,7 +401,18 @@ public class MainActivity extends Activity {
     // ================================================================== contenu
 
     private boolean passFilter(MediaItem m) {
+        if (tab == TAB_VIDEOS) return m.video;
+        if (tab == TAB_PHOTOS) return !m.video || includeVideos;
         return filter == F_ALL || (filter == F_VIDEOS) == m.video;
+    }
+
+    /** Vue « liste de dossiers » pour l'onglet courant ? */
+    private boolean isFolderView() {
+        if (openAlbum != null) return false;
+        if (tab == TAB_ALBUMS) return true;
+        if (tab == TAB_VIDEOS) return videosFolders;
+        if (tab == TAB_PHOTOS) return photosFolders;
+        return false;
     }
 
     private void addHeader(String text) {
@@ -350,54 +421,71 @@ public class MainActivity extends Activity {
         rows.add(r);
     }
 
+    /** Ajoute les dossiers adaptés à l'onglet ; renvoie leur nombre. */
+    private int addAlbumRows(String q) {
+        int n = 0;
+        for (MediaRepo.Album a : repo.albums) {
+            if (!q.isEmpty() && !a.name.toLowerCase(Locale.ROOT).contains(q)) continue;
+            int count = 0;
+            MediaItem cover = null;
+            for (MediaItem m : a.items) {
+                if (passFilter(m)) {
+                    count++;
+                    if (cover == null) cover = m;
+                }
+            }
+            if (count == 0 && tab != TAB_ALBUMS) continue; // les albums vides n'apparaissent que dans « Albums »
+            Row r = new Row(T_ALBUM);
+            r.album = a;
+            r.cover = cover;
+            r.count = count;
+            rows.add(r);
+            n++;
+        }
+        return n;
+    }
+
     private void rebuildRows() {
         rows.clear();
         visibleMedia.clear();
         if (openAlbum != null && repo.album(openAlbum) == null) openAlbum = null;
-        String q = query.trim().toLowerCase(Locale.ROOT);
-        String empty;
+        String empty = "";
 
-        if (!q.isEmpty()) {
-            List<MediaRepo.Album> found = new ArrayList<>();
-            for (MediaRepo.Album a : repo.albums) if (a.name.toLowerCase(Locale.ROOT).contains(q)) found.add(a);
-            if (!found.isEmpty()) {
-                addHeader("Albums (" + found.size() + ")");
-                for (MediaRepo.Album a : found) {
-                    Row r = new Row(T_ALBUM);
-                    r.album = a;
-                    rows.add(r);
+        if (tab != TAB_SETTINGS) {
+            String q = query.trim().toLowerCase(Locale.ROOT);
+            if (!q.isEmpty()) {
+                int hi = rows.size();
+                addHeader("");
+                int n = addAlbumRows(q);
+                if (n == 0) rows.remove(hi); else rows.get(hi).text = "Albums (" + n + ")";
+                for (MediaItem m : repo.all) {
+                    if (passFilter(m) && m.name().toLowerCase(Locale.ROOT).contains(q)) visibleMedia.add(m);
                 }
-            }
-            for (MediaItem m : repo.all) {
-                if (passFilter(m) && m.name().toLowerCase(Locale.ROOT).contains(q)) visibleMedia.add(m);
-            }
-            if (!visibleMedia.isEmpty()) {
-                addHeader("Photos et vidéos (" + visibleMedia.size() + ")");
-                for (MediaItem m : visibleMedia) {
-                    Row r = new Row(T_MEDIA);
-                    r.media = m;
-                    rows.add(r);
+                if (!visibleMedia.isEmpty()) {
+                    addHeader("Photos et vidéos (" + visibleMedia.size() + ")");
+                    for (MediaItem m : visibleMedia) {
+                        Row r = new Row(T_MEDIA);
+                        r.media = m;
+                        rows.add(r);
+                    }
                 }
+                empty = "Aucun résultat pour « " + query.trim() + " »";
+            } else if (isFolderView()) {
+                addAlbumRows("");
+                empty = tab == TAB_VIDEOS ? "Aucun dossier contenant des vidéos"
+                        : tab == TAB_PHOTOS ? "Aucun dossier contenant des photos" : "Aucun album";
+            } else {
+                List<MediaItem> src = openAlbum != null ? repo.album(openAlbum).items : repo.all;
+                for (MediaItem m : src) if (passFilter(m)) visibleMedia.add(m);
+                addDateGrouped(visibleMedia);
+                empty = tab == TAB_VIDEOS ? "Aucune vidéo"
+                        : tab == TAB_PHOTOS ? "Aucune photo" : "Aucune photo ni vidéo";
             }
-            empty = "Aucun résultat pour « " + query.trim() + " »";
-        } else if (tab == TAB_ALBUMS && openAlbum == null) {
-            for (MediaRepo.Album a : repo.albums) {
-                Row r = new Row(T_ALBUM);
-                r.album = a;
-                rows.add(r);
-            }
-            empty = "Aucun album";
-        } else {
-            List<MediaItem> src = openAlbum != null ? repo.album(openAlbum).items : repo.all;
-            for (MediaItem m : src) if (passFilter(m)) visibleMedia.add(m);
-            addDateGrouped(visibleMedia);
-            empty = filter == F_VIDEOS ? "Aucune vidéo" : filter == F_PHOTOS ? "Aucune photo" : "Aucune photo ni vidéo";
         }
 
         adapter.notifyDataSetChanged();
-        boolean isEmpty = rows.isEmpty() && repo.loaded;
         emptyView.setText(empty);
-        emptyView.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        emptyView.setVisibility(rows.isEmpty() && repo.loaded && tab != TAB_SETTINGS ? View.VISIBLE : View.GONE);
         styleChrome();
     }
 
@@ -439,25 +527,30 @@ public class MainActivity extends Activity {
         }
         if (openAlbum == null) savedScroll[tab] = glm.findFirstVisibleItemPosition();
         openAlbum = null;
+        filter = F_ALL;
         tab = t;
         rebuildRows();
+        invalidateOptionsMenu();
         glm.scrollToPositionWithOffset(Math.max(0, savedScroll[t]), 0);
     }
 
     private void openAlbumView(MediaRepo.Album a) {
         if (searchItem != null && searchItem.isActionViewExpanded()) searchItem.collapseActionView();
-        if (tab == TAB_ALBUMS) savedScroll[TAB_ALBUMS] = glm.findFirstVisibleItemPosition();
-        tab = TAB_ALBUMS;
+        if (openAlbum == null && query.isEmpty()) savedScroll[tab] = glm.findFirstVisibleItemPosition();
         openAlbum = a.path;
+        filter = F_ALL;
         rebuildRows();
+        invalidateOptionsMenu();
         glm.scrollToPosition(0);
     }
 
     private void closeAlbum() {
         if (actionMode != null) actionMode.finish();
         openAlbum = null;
+        filter = F_ALL;
         rebuildRows();
-        glm.scrollToPositionWithOffset(Math.max(0, savedScroll[TAB_ALBUMS]), 0);
+        invalidateOptionsMenu();
+        glm.scrollToPositionWithOffset(Math.max(0, savedScroll[tab]), 0);
     }
 
     private void openViewer(List<MediaItem> list, int index, boolean randomMode) {
@@ -528,10 +621,31 @@ public class MainActivity extends Activity {
         });
 
         menu.add(0, 2, 0, "🔀").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
-        menu.add(0, 3, 0, "Lecture aléatoire");
-        menu.add(0, 4, 0, "Nouvel album");
-        menu.add(0, 5, 0, "Taille de la grille");
-        menu.add(0, 6, 0, "Actualiser");
+        menu.add(0, 3, 0, "Sélectionner");
+        menu.add(0, 4, 0, "Vue");
+        menu.add(0, 5, 0, "Vidéos");
+        menu.add(0, 6, 0, "Nombre de colonnes");
+        menu.add(0, 7, 0, "Nouvel album");
+        menu.add(0, 8, 0, "Actualiser");
+        return true;
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        boolean settings = tab == TAB_SETTINGS;
+        boolean folders = query.isEmpty() && isFolderView();
+        menu.findItem(1).setVisible(!settings);
+        menu.findItem(2).setVisible(!settings);
+        menu.findItem(3).setVisible(!settings && !folders);
+        MenuItem view = menu.findItem(4);
+        view.setVisible((tab == TAB_PHOTOS || tab == TAB_VIDEOS) && openAlbum == null && query.isEmpty());
+        view.setTitle(folders ? "Tout afficher en grille" : "Afficher par dossiers");
+        MenuItem vid = menu.findItem(5);
+        vid.setVisible(tab == TAB_PHOTOS);
+        vid.setTitle(includeVideos ? "Exclure les vidéos" : "Inclure les vidéos");
+        menu.findItem(6).setVisible(!settings && !folders);
+        menu.findItem(7).setVisible(tab == TAB_ALBUMS);
+        menu.findItem(8).setVisible(!settings);
         return true;
     }
 
@@ -547,11 +661,31 @@ public class MainActivity extends Activity {
             return true;
         }
         switch (id) {
-            case 2:
-            case 3: playRandom(); return true;
-            case 4: createAlbum(); return true;
-            case 5: chooseColumns(); return true;
-            case 6: reload(); return true;
+            case 2: playRandom(); return true;
+            case 3: beginSelection(); return true;
+            case 4:
+                if (tab == TAB_PHOTOS) {
+                    photosFolders = !photosFolders;
+                    prefs().edit().putBoolean("photos_folders", photosFolders).apply();
+                } else {
+                    videosFolders = !videosFolders;
+                    prefs().edit().putBoolean("videos_folders", videosFolders).apply();
+                }
+                refreshSettings();
+                rebuildRows();
+                invalidateOptionsMenu();
+                glm.scrollToPosition(0);
+                return true;
+            case 5:
+                includeVideos = !includeVideos;
+                prefs().edit().putBoolean("inc_video", includeVideos).apply();
+                refreshSettings();
+                rebuildRows();
+                invalidateOptionsMenu();
+                return true;
+            case 6: chooseColumns(); return true;
+            case 7: createAlbum(); return true;
+            case 8: reload(); return true;
         }
         return super.onOptionsItemSelected(item);
     }
@@ -563,6 +697,7 @@ public class MainActivity extends Activity {
                 .setItems(new String[]{"3 (grandes)", "4 (normal)", "6 (petites)"}, (d, w) -> {
                     cols = options[w];
                     prefs().edit().putInt("cols", cols).apply();
+                    refreshSettings();
                     adapter.notifyDataSetChanged();
                 })
                 .show();
@@ -594,16 +729,20 @@ public class MainActivity extends Activity {
 
     private void toggle(MediaItem m, int pos) {
         if (!selected.remove(m)) selected.add(m);
-        if (selected.isEmpty()) {
-            if (actionMode != null) actionMode.finish();
-        } else if (actionMode != null) {
-            actionMode.setTitle(selected.size() + " sélectionné(s)");
+        if (actionMode != null) {
+            actionMode.setTitle(selected.isEmpty() ? "Sélectionner" : selected.size() + " sélectionné(s)");
             actionMode.invalidate();
         }
         adapter.notifyItemChanged(pos);
     }
 
     private void startSelection(MediaItem first, int pos) {
+        beginSelection();
+        toggle(first, pos);
+    }
+
+    private void beginSelection() {
+        if (actionMode != null) return;
         actionMode = startActionMode(new ActionMode.Callback() {
             @Override
             public boolean onCreateActionMode(ActionMode mode, Menu menu) {
@@ -617,8 +756,9 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                MenuItem r = menu.findItem(3);
-                if (r != null) r.setVisible(selected.size() == 1);
+                menu.findItem(1).setVisible(!selected.isEmpty());
+                menu.findItem(2).setVisible(!selected.isEmpty());
+                menu.findItem(3).setVisible(selected.size() == 1);
                 return true;
             }
 
@@ -645,7 +785,8 @@ public class MainActivity extends Activity {
                 adapter.notifyDataSetChanged();
             }
         });
-        toggle(first, pos);
+        if (actionMode != null) actionMode.setTitle("Sélectionner");
+        adapter.notifyDataSetChanged();
     }
 
     private void endSelection() {
@@ -921,7 +1062,7 @@ public class MainActivity extends Activity {
 
     private static class AlbumVH extends RecyclerView.ViewHolder {
         ImageView image;
-        TextView name, count;
+        TextView name, count, more;
         AlbumVH(View v) { super(v); }
     }
 
@@ -945,42 +1086,47 @@ public class MainActivity extends Activity {
                 return new HeaderVH(t);
             }
             if (type == T_ALBUM) {
-                LinearLayout box = new LinearLayout(MainActivity.this);
-                box.setOrientation(LinearLayout.VERTICAL);
-                box.setPadding(dp(6), dp(6), dp(6), dp(10));
-                box.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
-                SquareFrame sq = new SquareFrame(MainActivity.this);
+                // ligne de dossier : couverture | nom | nombre | ⋮
+                LinearLayout row = new LinearLayout(MainActivity.this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(8), dp(6), dp(4), dp(6));
+                row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+                AlbumVH vh = new AlbumVH(row);
+                vh.image = new ImageView(MainActivity.this);
                 GradientDrawable g = new GradientDrawable();
                 g.setColor(0xFF242424);
-                g.setCornerRadius(dp(14));
-                sq.setBackground(g);
-                sq.setClipToOutline(true);
-                AlbumVH vh = new AlbumVH(box);
-                vh.image = new ImageView(MainActivity.this);
-                sq.addView(vh.image, new FrameLayout.LayoutParams(-1, -1));
-                box.addView(sq, new LinearLayout.LayoutParams(-1, -2));
+                g.setCornerRadius(dp(10));
+                vh.image.setBackground(g);
+                vh.image.setClipToOutline(true);
+                row.addView(vh.image, new LinearLayout.LayoutParams(dp(76), dp(76)));
                 vh.name = new TextView(MainActivity.this);
                 vh.name.setTextColor(Color.WHITE);
-                vh.name.setTextSize(14);
-                vh.name.setTypeface(null, Typeface.BOLD);
+                vh.name.setTextSize(17);
                 vh.name.setSingleLine(true);
                 vh.name.setEllipsize(TextUtils.TruncateAt.END);
-                vh.name.setPadding(dp(2), dp(6), dp(2), 0);
-                box.addView(vh.name);
+                vh.name.setPadding(dp(16), 0, dp(8), 0);
+                row.addView(vh.name, new LinearLayout.LayoutParams(0, -2, 1));
                 vh.count = new TextView(MainActivity.this);
-                vh.count.setTextColor(0xFF9E9E9E);
-                vh.count.setTextSize(12);
-                vh.count.setPadding(dp(2), 0, dp(2), 0);
-                box.addView(vh.count);
-                box.setOnClickListener(v -> {
+                vh.count.setTextColor(0xFFBDBDBD);
+                vh.count.setTextSize(16);
+                row.addView(vh.count);
+                vh.more = new TextView(MainActivity.this);
+                vh.more.setText("⋮");
+                vh.more.setTextColor(Color.WHITE);
+                vh.more.setTextSize(22);
+                vh.more.setGravity(Gravity.CENTER);
+                row.addView(vh.more, new LinearLayout.LayoutParams(dp(44), dp(48)));
+                row.setOnClickListener(v -> {
                     int p = vh.getBindingAdapterPosition();
                     if (p >= 0 && p < rows.size()) openAlbumView(rows.get(p).album);
                 });
-                box.setOnLongClickListener(v -> {
+                View.OnClickListener menu = v -> {
                     int p = vh.getBindingAdapterPosition();
                     if (p >= 0 && p < rows.size()) albumMenu(rows.get(p).album);
-                    return true;
-                });
+                };
+                row.setOnLongClickListener(v -> { menu.onClick(v); return true; });
+                vh.more.setOnClickListener(menu);
                 return vh;
             }
             // T_MEDIA
@@ -1034,11 +1180,10 @@ public class MainActivity extends Activity {
             } else if (holder instanceof AlbumVH) {
                 AlbumVH vh = (AlbumVH) holder;
                 vh.name.setText(r.album.name);
-                vh.count.setText(r.album.countLabel());
-                MediaItem cover = r.album.cover();
-                if (cover != null) {
+                vh.count.setText(String.valueOf(r.count));
+                if (r.cover != null) {
                     vh.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    thumbs.load(cover, vh.image);
+                    thumbs.load(r.cover, vh.image);
                 } else {
                     vh.image.setTag(null);
                     vh.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);

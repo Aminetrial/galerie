@@ -5,15 +5,14 @@ L'APK est compilé automatiquement par GitHub Actions et publié dans les **Rele
 
 ## Fonctions
 
-**🖼️ Photos** : toutes les photos et vidéos du téléphone, classées par date (Aujourd'hui, Hier, …)
-- Filtres Tout / 📷 Photos / 🎬 Vidéos, durée affichée sur les vidéos
-- Appui long = sélection multiple → Supprimer · Déplacer · Renommer · Tout sélectionner
+Barre du bas : **📁 Albums · 🎬 Vidéos · 🖼️ Photos · ⚙️ Réglages**
 
-**📁 Albums** : tous les dossiers qui contiennent des photos/vidéos (couverture + nombre)
-- Toucher = ouvrir l'album · Appui long = Renommer / Déplacer / Supprimer l'album
-- Menu ⋮ → Nouvel album
-
-**Partout** : 🔍 recherche (albums + fichiers) · 🔀 lecture aléatoire · taille de la grille (3/4/6)
+- **📁 Albums (accueil)** : tous les dossiers (liste : couverture, nom, nombre, ⋮ pour renommer/déplacer/supprimer)
+- **🎬 Vidéos** : seulement les dossiers qui contiennent des vidéos (ou toutes les vidéos en grille, par date)
+- **🖼️ Photos** : toutes les photos en grille par date, vidéos exclues par défaut ; menu ⋮ → « Inclure les vidéos » ; « Afficher par dossiers » pour la vue dossiers
+- **⚙️ Réglages** : taille de la grille, vidéos dans Photos, vues, nouvel album, actualiser
+- Menu ⋮ → Sélectionner (ou appui long) : supprimer, déplacer, renommer plusieurs éléments
+- 🔍 recherche (albums + fichiers) · 🔀 lecture aléatoire
 
 **Lecteur** : barre du bas (vidéo seulement) : ⏪ -10 s · ⏸ Pause · +10 s ⏩ · ↻ Relancer · barre de progression · double-tap gauche/droite
 - Flèches ‹ › sur les côtés (ou glisser) : élément précédent / suivant dans l'ordre
