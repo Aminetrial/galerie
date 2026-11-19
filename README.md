@@ -21,7 +21,7 @@ Barre du bas : **📁 Albums · 🎬 Vidéos · 🖼️ Photos · ⚙️ Réglag
 - Aléatoire activé : ⏭ / glisser gauche / fin de vidéo / fin du délai d'une image = élément au hasard (sans répétition) ; ⏮ / glisser droite = revenir à l'élément vu avant
 - Aléatoire désactivé : suivant / précédent dans l'ordre de la liste affichée (tout, un dossier, une recherche)
 - Fin de vidéo : passe au suivant (ou au hasard). Images : Réglages → « Passage automatique des images » (désactivé, 5 s, 10 s)
-- Barre de progression (vidéo) · double-tap gauche/droite = -10 s / +10 s · glisser = précédent/suivant · glisser vers le bas = fermer
+- Barre de progression (vidéo) · double-tap droite = +10 s, double-tap gauche = média suivant (réglable : -10 s / suivant / rien) · glisser = précédent/suivant · glisser vers le bas = fermer
 
 ## Publier avec Termux
 

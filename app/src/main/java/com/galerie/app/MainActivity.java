@@ -91,6 +91,7 @@ public class MainActivity extends Activity {
     private boolean photosFolders = false;  // onglet Photos : vue par dossiers (sinon grille)
     private boolean videosFolders = true;   // onglet Vidéos : vue par dossiers (sinon grille)
     private boolean thumbsOriginal = true;  // miniatures entières (format original) au lieu de carrées rognées
+    private int leftTap = 1;             // 0 = -10 s, 1 = média suivant, 2 = rien
     private int photoDelay = 0;           // secondes avant de passer à l'image suivante (0 = désactivé)
     private boolean randomOn = false;       // mode aléatoire (partagé avec la visionneuse)
     private int sortMode = SORT_DATE;
@@ -111,7 +112,7 @@ public class MainActivity extends Activity {
     private final TextView[] chips = new TextView[3];
     private final TextView[] navItems = new TextView[4];
     private ScrollView settingsView;
-    private final TextView[] setRows = new TextView[10];
+    private final TextView[] setRows = new TextView[11];
     private TextView emptyView;
     private ProgressBar progress;
     private LinearLayout permissionView;
@@ -145,6 +146,7 @@ public class MainActivity extends Activity {
         videosFolders = p.getBoolean("videos_folders", true);
         randomOn = p.getBoolean("random_on", false);
         photoDelay = p.getInt("photo_delay", 0);
+        leftTap = p.getInt("left_tap", 1);
         thumbsOriginal = p.getBoolean("thumbs_original", true);
         sortMode = p.getInt("sort_mode", SORT_DATE);
         sortRev = p.getBoolean("sort_rev", false);
@@ -348,6 +350,7 @@ public class MainActivity extends Activity {
                 v -> toggleThumbs(),
                 v -> toggleRandom(),
                 v -> chooseDelay(),
+                v -> chooseLeftTap(),
                 v -> { includeVideos = !includeVideos; prefs().edit().putBoolean("inc_video", includeVideos).apply(); refreshSettings(); },
                 v -> { photosFolders = !photosFolders; prefs().edit().putBoolean("photos_folders", photosFolders).apply(); refreshSettings(); },
                 v -> { videosFolders = !videosFolders; prefs().edit().putBoolean("videos_folders", videosFolders).apply(); refreshSettings(); },
@@ -386,11 +389,12 @@ public class MainActivity extends Activity {
         setRow(setRows[4], "Passage automatique des images", photoDelay == 0
                 ? "Désactivé : on change d'image avec ⏭ ou en glissant"
                 : "Après " + photoDelay + " secondes, passe au suivant (aléatoire si activé)");
-        setRow(setRows[5], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
-        setRow(setRows[6], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille");
-        setRow(setRows[7], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille");
-        setRow(setRows[8], "Nouvel album", "Créer un dossier dans Pictures");
-        setRow(setRows[9], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
+        setRow(setRows[5], "Double-tap à gauche", tapLabel(leftTap));
+        setRow(setRows[6], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
+        setRow(setRows[7], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[8], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[9], "Nouvel album", "Créer un dossier dans Pictures");
+        setRow(setRows[10], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
     }
 
     private void toggleThumbs() {
@@ -419,6 +423,23 @@ public class MainActivity extends Activity {
                 .setSingleChoiceItems(new String[]{"Désactivé", "5 secondes", "10 secondes"}, checked, (d, w) -> {
                     photoDelay = values[w];
                     prefs().edit().putInt("photo_delay", photoDelay).apply();
+                    refreshSettings();
+                    d.dismiss();
+                })
+                .setNegativeButton("Fermer", null)
+                .show();
+    }
+
+    private static String tapLabel(int m) {
+        return m == 1 ? "Média suivant (photo et vidéo)" : m == 2 ? "Aucune action" : "Reculer de 10 secondes (vidéo)";
+    }
+
+    private void chooseLeftTap() {
+        new AlertDialog.Builder(this)
+                .setTitle("Double-tap à gauche")
+                .setSingleChoiceItems(new String[]{tapLabel(0), tapLabel(1), tapLabel(2)}, leftTap, (d, w) -> {
+                    leftTap = w;
+                    prefs().edit().putInt("left_tap", w).apply();
                     refreshSettings();
                     d.dismiss();
                 })

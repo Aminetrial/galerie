@@ -48,6 +48,7 @@ public class ViewerActivity extends Activity {
     private ArrayList<String> paths;
     private int index;
     private boolean randomMode;
+    private int leftTap = 1;
     private int photoDelay = 0; // secondes ; 0 = pas de passage automatique des images
     private final ArrayDeque<String> history = new ArrayDeque<>();
     private final ArrayList<Integer> shuffleBag = new ArrayList<>();
@@ -108,8 +109,9 @@ public class ViewerActivity extends Activity {
 
         android.content.SharedPreferences prefs = getSharedPreferences("galerie", MODE_PRIVATE);
         photoDelay = prefs.getInt("photo_delay", 0);
+        leftTap = prefs.getInt("left_tap", 1);
         if (state != null) {
-            paths = state.getStringArrayList("paths");
+            paths = sPaths;
             index = state.getInt("index", 0);
             resumePos = state.getInt("pos", -1);
             randomMode = state.getBoolean("random", false);
@@ -150,7 +152,6 @@ public class ViewerActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
-        out.putStringArrayList("paths", paths);
         out.putInt("index", index);
         out.putInt("pos", isVideo ? videoView.getCurrentPosition() : -1);
         out.putBoolean("random", randomMode);
@@ -391,10 +392,13 @@ public class ViewerActivity extends Activity {
 
             @Override
             public boolean onDoubleTap(MotionEvent e) {
-                if (!isVideo || onControls(e)) return false;
-                // double-tap côté gauche = -10 s, côté droit = +10 s
+                if (onControls(e)) return false;
+                // côté gauche : réglage (média suivant / -10 s / rien) ; côté droit : +10 s (vidéo)
                 int w = getResources().getDisplayMetrics().widthPixels;
-                skip(e.getRawX() < w / 2f ? -10000 : 10000);
+                if (e.getRawX() < w / 2f) {
+                    if (leftTap == 1) next();
+                    else if (leftTap == 0) skip(-10000);
+                } else skip(10000);
                 return true;
             }
 
