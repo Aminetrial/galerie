@@ -91,8 +91,8 @@ public class MainActivity extends Activity {
     private boolean photosFolders = false;  // onglet Photos : vue par dossiers (sinon grille)
     private boolean videosFolders = true;   // onglet Vidéos : vue par dossiers (sinon grille)
     private boolean thumbsOriginal = true;  // miniatures entières (format original) au lieu de carrées rognées
+    private int photoDelay = 0;           // secondes avant de passer à l'image suivante (0 = désactivé)
     private boolean randomOn = false;       // mode aléatoire (partagé avec la visionneuse)
-    private Button randomFab;
     private int sortMode = SORT_DATE;
     private boolean sortRev = false;        // false = sens par défaut du tri choisi
     private final int[] savedScroll = new int[4];
@@ -111,7 +111,7 @@ public class MainActivity extends Activity {
     private final TextView[] chips = new TextView[3];
     private final TextView[] navItems = new TextView[4];
     private ScrollView settingsView;
-    private final TextView[] setRows = new TextView[8];
+    private final TextView[] setRows = new TextView[10];
     private TextView emptyView;
     private ProgressBar progress;
     private LinearLayout permissionView;
@@ -144,6 +144,7 @@ public class MainActivity extends Activity {
         photosFolders = p.getBoolean("photos_folders", false);
         videosFolders = p.getBoolean("videos_folders", true);
         randomOn = p.getBoolean("random_on", false);
+        photoDelay = p.getInt("photo_delay", 0);
         thumbsOriginal = p.getBoolean("thumbs_original", true);
         sortMode = p.getInt("sort_mode", SORT_DATE);
         sortRev = p.getBoolean("sort_rev", false);
@@ -166,7 +167,7 @@ public class MainActivity extends Activity {
         permissionView.setVisibility(View.GONE);
         contentView.setVisibility(View.VISIBLE);
         randomOn = prefs().getBoolean("random_on", false);
-        styleRandomFab();
+        refreshSettings();
         if (!repo.loaded) reload();
         else if (repo.dirty) {
             repo.dirty = false;
@@ -311,19 +312,6 @@ public class MainActivity extends Activity {
 
         root.addView(main, new FrameLayout.LayoutParams(-1, -1));
 
-        // bouton « mode aléatoire », en bas à droite
-        randomFab = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        randomFab.setText("🔀");
-        randomFab.setTextSize(22);
-        randomFab.setMinWidth(0);
-        randomFab.setMinimumWidth(0);
-        randomFab.setPadding(0, 0, 0, 0);
-        randomFab.setOnClickListener(v -> toggleRandom());
-        FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.BOTTOM | Gravity.END);
-        rl.setMargins(0, 0, dp(16), dp(76));
-        root.addView(randomFab, rl);
-        styleRandomFab();
-
         // écran d'autorisation
         permissionView = new LinearLayout(this);
         permissionView.setOrientation(LinearLayout.VERTICAL);
@@ -358,6 +346,8 @@ public class MainActivity extends Activity {
                 v -> chooseColumns(),
                 v -> chooseSort(),
                 v -> toggleThumbs(),
+                v -> toggleRandom(),
+                v -> chooseDelay(),
                 v -> { includeVideos = !includeVideos; prefs().edit().putBoolean("inc_video", includeVideos).apply(); refreshSettings(); },
                 v -> { photosFolders = !photosFolders; prefs().edit().putBoolean("photos_folders", photosFolders).apply(); refreshSettings(); },
                 v -> { videosFolders = !videosFolders; prefs().edit().putBoolean("videos_folders", videosFolders).apply(); refreshSettings(); },
@@ -390,11 +380,17 @@ public class MainActivity extends Activity {
         setRow(setRows[0], "Taille de la grille", cols + " éléments par ligne");
         setRow(setRows[1], "Trier par", sortLabel(sortMode) + " — " + sortDirection(sortMode));
         setRow(setRows[2], "Miniatures", thumbsOriginal ? "Format original (image entière, sans rogner)" : "Carrées (rognées)");
-        setRow(setRows[3], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
-        setRow(setRows[4], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille");
-        setRow(setRows[5], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille");
-        setRow(setRows[6], "Nouvel album", "Créer un dossier dans Pictures");
-        setRow(setRows[7], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
+        setRow(setRows[3], "Mode aléatoire", randomOn
+                ? "Activé : en faisant défiler et à la fin d'une vidéo, l'élément suivant est tiré au hasard"
+                : "Désactivé : suivant = ordre de la liste");
+        setRow(setRows[4], "Passage automatique des images", photoDelay == 0
+                ? "Désactivé : on change d'image avec ⏭ ou en glissant"
+                : "Après " + photoDelay + " secondes, passe au suivant (aléatoire si activé)");
+        setRow(setRows[5], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
+        setRow(setRows[6], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[7], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[8], "Nouvel album", "Créer un dossier dans Pictures");
+        setRow(setRows[9], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
     }
 
     private void toggleThumbs() {
@@ -409,29 +405,33 @@ public class MainActivity extends Activity {
         return thumbsOriginal ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP;
     }
 
-    private void styleRandomFab() {
-        GradientDrawable g = new GradientDrawable();
-        g.setShape(GradientDrawable.OVAL);
-        g.setColor(randomOn ? 0xFF42A5F5 : 0xDD2A2A2A);
-        g.setStroke(dp(2), randomOn ? 0xFFFFFFFF : 0x88FFFFFF);
-        randomFab.setBackground(g);
-    }
-
     private void setRandomOn(boolean on) {
         randomOn = on;
         prefs().edit().putBoolean("random_on", on).apply();
-        styleRandomFab();
+        refreshSettings();
+    }
+
+    private void chooseDelay() {
+        final int[] values = {0, 5, 10};
+        int checked = photoDelay == 5 ? 1 : photoDelay == 10 ? 2 : 0;
+        new AlertDialog.Builder(this)
+                .setTitle("Passage automatique des images")
+                .setSingleChoiceItems(new String[]{"Désactivé", "5 secondes", "10 secondes"}, checked, (d, w) -> {
+                    photoDelay = values[w];
+                    prefs().edit().putInt("photo_delay", photoDelay).apply();
+                    refreshSettings();
+                    d.dismiss();
+                })
+                .setNegativeButton("Fermer", null)
+                .show();
     }
 
     private void toggleRandom() {
         setRandomOn(!randomOn);
-        toast(randomOn ? "Mode aléatoire activé : ouvrez une photo ou vidéo, puis faites défiler"
-                : "Mode aléatoire désactivé");
     }
 
     private void styleChrome() {
         boolean settings = tab == TAB_SETTINGS;
-        randomFab.setVisibility(settings ? View.GONE : View.VISIBLE);
         settingsView.setVisibility(settings ? View.VISIBLE : View.GONE);
         rv.setVisibility(settings ? View.GONE : View.VISIBLE);
         chipsRow.setVisibility(tab == TAB_ALBUMS && openAlbum != null && query.isEmpty() ? View.VISIBLE : View.GONE);

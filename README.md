@@ -13,15 +13,15 @@ Barre du bas : **📁 Albums · 🎬 Vidéos · 🖼️ Photos · ⚙️ Réglag
 - **⚙️ Réglages** : taille de la grille, vidéos dans Photos, vues, nouvel album, actualiser
 - Menu ⋮ → Sélectionner (ou appui long) : supprimer, déplacer, renommer plusieurs éléments
 - 🔍 recherche (albums + fichiers) · 🔀 lecture aléatoire
-- **Fin de vidéo** : enchaîne automatiquement sur l'élément suivant, ou sur un élément au hasard si le mode 🔀 est activé.
 - **Format original** : miniatures entières (sans rogner), réglable (menu ⋮ → Miniatures, ou Réglages). Le lecteur affiche toujours l'image / la vidéo en entier.
-- **Bouton 🔀 en bas à droite** (accueil et lecteur) : bleu = mode aléatoire activé. Une fois activé, ouvrez une photo/vidéo puis faites défiler : « suivant » donne un élément au hasard (sans répétition), « précédent » / ↶ revient en arrière.
+- **Mode aléatoire** : bouton 🔀 dans le lecteur, ou ⚙️ Réglages (même réglage).
 - **Tri** (menu ⋮ → Trier…, ou Réglages) : date, date de modification, taille (stockage), nom (alphabétique) + « ⇅ Inverser l'ordre ». S'applique aux photos, vidéos et albums.
 
-**Lecteur vidéo plein écran** (commandes par-dessus la vidéo, masquées automatiquement)
-- Pastille du bas : ↻ relancer · ⏮ précédent · -10 s · ⏯ · +10 s · ⏭ suivant · ⚙ réglages (Propriétés, Partager, Renommer, Supprimer, Tourner l'écran)
-- Au-dessus : barre de progression avec temps · ↶ retour (élément vu juste avant) · 🔓 verrouiller · 🔊 muet · vitesse (1x, 1.25x, 1.5x, 2x, 0.5x, 0.75x) · PiP · 📷 capture d'image (Pictures/Captures)
-- Double-tap gauche/droite = -10 s / +10 s · glisser = précédent/suivant · bouton 🔀 en bas à droite = mode aléatoire
+**Lecteur photo / vidéo** : une seule barre de commandes : ↻ relancer · ⏮ précédent · ⏯ · ⏭ suivant · 🔀 aléatoire (activé ou non)
+- Aléatoire activé : ⏭ / glisser gauche / fin de vidéo / fin du délai d'une image = élément au hasard (sans répétition) ; ⏮ / glisser droite = revenir à l'élément vu avant
+- Aléatoire désactivé : suivant / précédent dans l'ordre de la liste affichée (tout, un dossier, une recherche)
+- Fin de vidéo : passe au suivant (ou au hasard). Images : Réglages → « Passage automatique des images » (désactivé, 5 s, 10 s)
+- Barre de progression (vidéo) · double-tap gauche/droite = -10 s / +10 s · glisser = précédent/suivant · glisser vers le bas = fermer
 
 ## Publier avec Termux
 
