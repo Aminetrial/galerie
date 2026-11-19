@@ -78,8 +78,8 @@ public class MediaRepo {
 
     private static void query(Context c, Uri uri, boolean video, List<MediaItem> out) {
         String[] proj = video
-                ? new String[]{"_id", "_data", "datetaken", "date_modified", "duration"}
-                : new String[]{"_id", "_data", "datetaken", "date_modified"};
+                ? new String[]{"_id", "_data", "datetaken", "date_modified", "duration", "_size"}
+                : new String[]{"_id", "_data", "datetaken", "date_modified", "_size"};
         try (Cursor cur = c.getContentResolver().query(uri, proj, null, null, null)) {
             if (cur == null) return;
             int iId = cur.getColumnIndex("_id");
@@ -87,6 +87,7 @@ public class MediaRepo {
             int iTaken = cur.getColumnIndex("datetaken");
             int iMod = cur.getColumnIndex("date_modified");
             int iDur = video ? cur.getColumnIndex("duration") : -1;
+            int iSize = cur.getColumnIndex("_size");
             while (cur.moveToNext()) {
                 String path = cur.getString(iData);
                 if (path == null || path.contains("/.")) continue;
@@ -94,7 +95,10 @@ public class MediaRepo {
                 long mod = iMod >= 0 ? cur.getLong(iMod) * 1000L : 0;
                 long date = taken > 0 ? taken : mod;
                 long dur = iDur >= 0 ? cur.getLong(iDur) : 0;
-                out.add(new MediaItem(cur.getLong(iId), path, date, video, dur));
+                MediaItem item = new MediaItem(cur.getLong(iId), path, date, video, dur);
+                if (mod > 0) item.modified = mod;
+                if (iSize >= 0) item.size = cur.getLong(iSize);
+                out.add(item);
             }
         } catch (Exception ignored) { }
     }
@@ -112,7 +116,9 @@ public class MediaRepo {
                 if (f.isDirectory()) {
                     if (!f.getAbsolutePath().equals(root.getAbsolutePath() + "/Android")) stack.push(f);
                 } else if (FileUtil.isMedia(f)) {
-                    out.add(new MediaItem(-1, f.getAbsolutePath(), f.lastModified(), FileUtil.isVideo(f), 0));
+                    MediaItem item = new MediaItem(-1, f.getAbsolutePath(), f.lastModified(), FileUtil.isVideo(f), 0);
+                    item.size = f.length();
+                    out.add(item);
                 }
             }
         }

@@ -48,6 +48,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +67,8 @@ public class MainActivity extends Activity {
     private static final int SPAN = 12;
     // filtres (dans un album de l'onglet Albums)
     private static final int F_ALL = 0, F_PHOTOS = 1, F_VIDEOS = 2;
+    // tris
+    private static final int SORT_DATE = 0, SORT_MODIFIED = 1, SORT_SIZE = 2, SORT_NAME = 3;
 
     private static class Row {
         final int type;
@@ -74,6 +77,7 @@ public class MainActivity extends Activity {
         MediaRepo.Album album;
         MediaItem cover;
         int count;
+        long date, modified, size;
 
         Row(int type) { this.type = type; }
     }
@@ -86,6 +90,10 @@ public class MainActivity extends Activity {
     private boolean includeVideos = false;  // onglet Photos : inclure les vidéos
     private boolean photosFolders = false;  // onglet Photos : vue par dossiers (sinon grille)
     private boolean videosFolders = true;   // onglet Vidéos : vue par dossiers (sinon grille)
+    private boolean randomOn = false;       // mode aléatoire (partagé avec la visionneuse)
+    private Button randomFab;
+    private int sortMode = SORT_DATE;
+    private boolean sortRev = false;        // false = sens par défaut du tri choisi
     private final int[] savedScroll = new int[4];
 
     private MediaRepo repo;
@@ -102,7 +110,7 @@ public class MainActivity extends Activity {
     private final TextView[] chips = new TextView[3];
     private final TextView[] navItems = new TextView[4];
     private ScrollView settingsView;
-    private final TextView[] setRows = new TextView[6];
+    private final TextView[] setRows = new TextView[7];
     private TextView emptyView;
     private ProgressBar progress;
     private LinearLayout permissionView;
@@ -134,6 +142,9 @@ public class MainActivity extends Activity {
         includeVideos = p.getBoolean("inc_video", false);
         photosFolders = p.getBoolean("photos_folders", false);
         videosFolders = p.getBoolean("videos_folders", true);
+        randomOn = p.getBoolean("random_on", false);
+        sortMode = p.getInt("sort_mode", SORT_DATE);
+        sortRev = p.getBoolean("sort_rev", false);
         if (state != null) {
             tab = state.getInt("tab", TAB_ALBUMS);
             openAlbum = state.getString("album");
@@ -152,6 +163,8 @@ public class MainActivity extends Activity {
         }
         permissionView.setVisibility(View.GONE);
         contentView.setVisibility(View.VISIBLE);
+        randomOn = prefs().getBoolean("random_on", false);
+        styleRandomFab();
         if (!repo.loaded) reload();
         else if (repo.dirty) {
             repo.dirty = false;
@@ -296,6 +309,19 @@ public class MainActivity extends Activity {
 
         root.addView(main, new FrameLayout.LayoutParams(-1, -1));
 
+        // bouton « mode aléatoire », en bas à droite
+        randomFab = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        randomFab.setText("🔀");
+        randomFab.setTextSize(22);
+        randomFab.setMinWidth(0);
+        randomFab.setMinimumWidth(0);
+        randomFab.setPadding(0, 0, 0, 0);
+        randomFab.setOnClickListener(v -> toggleRandom());
+        FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.BOTTOM | Gravity.END);
+        rl.setMargins(0, 0, dp(16), dp(76));
+        root.addView(randomFab, rl);
+        styleRandomFab();
+
         // écran d'autorisation
         permissionView = new LinearLayout(this);
         permissionView.setOrientation(LinearLayout.VERTICAL);
@@ -328,6 +354,7 @@ public class MainActivity extends Activity {
         list.setPadding(0, dp(8), 0, dp(16));
         View.OnClickListener[] actions = {
                 v -> chooseColumns(),
+                v -> chooseSort(),
                 v -> { includeVideos = !includeVideos; prefs().edit().putBoolean("inc_video", includeVideos).apply(); refreshSettings(); },
                 v -> { photosFolders = !photosFolders; prefs().edit().putBoolean("photos_folders", photosFolders).apply(); refreshSettings(); },
                 v -> { videosFolders = !videosFolders; prefs().edit().putBoolean("videos_folders", videosFolders).apply(); refreshSettings(); },
@@ -358,15 +385,37 @@ public class MainActivity extends Activity {
 
     private void refreshSettings() {
         setRow(setRows[0], "Taille de la grille", cols + " éléments par ligne");
-        setRow(setRows[1], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
-        setRow(setRows[2], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille (tout, par date)");
-        setRow(setRows[3], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille (tout, par date)");
-        setRow(setRows[4], "Nouvel album", "Créer un dossier dans Pictures");
-        setRow(setRows[5], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
+        setRow(setRows[1], "Trier par", sortLabel(sortMode) + " — " + sortDirection(sortMode));
+        setRow(setRows[2], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
+        setRow(setRows[3], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[4], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[5], "Nouvel album", "Créer un dossier dans Pictures");
+        setRow(setRows[6], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
+    }
+
+    private void styleRandomFab() {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(randomOn ? 0xFF42A5F5 : 0xDD2A2A2A);
+        g.setStroke(dp(2), randomOn ? 0xFFFFFFFF : 0x88FFFFFF);
+        randomFab.setBackground(g);
+    }
+
+    private void setRandomOn(boolean on) {
+        randomOn = on;
+        prefs().edit().putBoolean("random_on", on).apply();
+        styleRandomFab();
+    }
+
+    private void toggleRandom() {
+        setRandomOn(!randomOn);
+        toast(randomOn ? "Mode aléatoire activé : ouvrez une photo ou vidéo, puis faites défiler"
+                : "Mode aléatoire désactivé");
     }
 
     private void styleChrome() {
         boolean settings = tab == TAB_SETTINGS;
+        randomFab.setVisibility(settings ? View.GONE : View.VISIBLE);
         settingsView.setVisibility(settings ? View.VISIBLE : View.GONE);
         rv.setVisibility(settings ? View.GONE : View.VISIBLE);
         chipsRow.setVisibility(tab == TAB_ALBUMS && openAlbum != null && query.isEmpty() ? View.VISIBLE : View.GONE);
@@ -423,15 +472,19 @@ public class MainActivity extends Activity {
 
     /** Ajoute les dossiers adaptés à l'onglet ; renvoie leur nombre. */
     private int addAlbumRows(String q) {
-        int n = 0;
+        List<Row> list = new ArrayList<>();
         for (MediaRepo.Album a : repo.albums) {
             if (!q.isEmpty() && !a.name.toLowerCase(Locale.ROOT).contains(q)) continue;
             int count = 0;
             MediaItem cover = null;
+            long date = 0, modified = 0, size = 0;
             for (MediaItem m : a.items) {
                 if (passFilter(m)) {
                     count++;
                     if (cover == null) cover = m;
+                    date = Math.max(date, m.date);
+                    modified = Math.max(modified, m.modified);
+                    size += m.size();
                 }
             }
             if (count == 0 && tab != TAB_ALBUMS) continue; // les albums vides n'apparaissent que dans « Albums »
@@ -439,10 +492,87 @@ public class MainActivity extends Activity {
             r.album = a;
             r.cover = cover;
             r.count = count;
-            rows.add(r);
-            n++;
+            r.date = date;
+            r.modified = modified;
+            r.size = size;
+            list.add(r);
         }
-        return n;
+        Comparator<Row> c;
+        switch (sortMode) {
+            case SORT_MODIFIED: c = (x, y) -> Long.compare(y.modified, x.modified); break;
+            case SORT_SIZE: c = (x, y) -> Long.compare(y.size, x.size); break;
+            case SORT_NAME: c = (x, y) -> FileUtil.naturalCompare(x.album.name, y.album.name); break;
+            default: c = (x, y) -> Long.compare(y.date, x.date);
+        }
+        Collections.sort(list, sortRev ? Collections.reverseOrder(c) : c);
+        rows.addAll(list);
+        return list.size();
+    }
+
+    // ---- tri des photos / vidéos
+
+    private Comparator<MediaItem> mediaCmp() {
+        Comparator<MediaItem> c;
+        switch (sortMode) {
+            case SORT_MODIFIED: c = (a, b) -> Long.compare(b.modified, a.modified); break;
+            case SORT_SIZE: c = (a, b) -> Long.compare(b.size(), a.size()); break;
+            case SORT_NAME: c = (a, b) -> FileUtil.naturalCompare(a.name(), b.name()); break;
+            default: c = (a, b) -> Long.compare(b.date, a.date);
+        }
+        return sortRev ? Collections.reverseOrder(c) : c;
+    }
+
+    private long dateOf(MediaItem m) {
+        return sortMode == SORT_MODIFIED ? m.modified : m.date;
+    }
+
+    private String sortLabel(int mode) {
+        switch (mode) {
+            case SORT_MODIFIED: return "Date de modification";
+            case SORT_SIZE: return "Taille (stockage)";
+            case SORT_NAME: return "Nom (alphabétique)";
+            default: return "Date";
+        }
+    }
+
+    private String sortDirection(int mode) {
+        if (mode == SORT_NAME) return sortRev ? "Z → A" : "A → Z";
+        if (mode == SORT_SIZE) return sortRev ? "plus petits d'abord" : "plus gros d'abord";
+        return sortRev ? "plus anciens d'abord" : "plus récents d'abord";
+    }
+
+    private void chooseSort() {
+        final int[] modes = {SORT_DATE, SORT_MODIFIED, SORT_SIZE, SORT_NAME};
+        String[] items = new String[modes.length];
+        int checked = 0;
+        for (int i = 0; i < modes.length; i++) {
+            items[i] = sortLabel(modes[i]);
+            if (modes[i] == sortMode) checked = i;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Trier par  (" + sortDirection(sortMode) + ")")
+                .setSingleChoiceItems(items, checked, (d, w) -> {
+                    if (modes[w] != sortMode) {
+                        sortMode = modes[w];
+                        sortRev = false; // sens par défaut du nouveau tri
+                    }
+                    applySort();
+                    d.dismiss();
+                })
+                .setNeutralButton("⇅ Inverser l'ordre", (d, w) -> {
+                    sortRev = !sortRev;
+                    applySort();
+                })
+                .setNegativeButton("Fermer", null)
+                .show();
+    }
+
+    private void applySort() {
+        prefs().edit().putInt("sort_mode", sortMode).putBoolean("sort_rev", sortRev).apply();
+        refreshSettings();
+        rebuildRows();
+        glm.scrollToPosition(0);
+        toast("Tri : " + sortLabel(sortMode) + " — " + sortDirection(sortMode));
     }
 
     private void rebuildRows() {
@@ -461,6 +591,7 @@ public class MainActivity extends Activity {
                 for (MediaItem m : repo.all) {
                     if (passFilter(m) && m.name().toLowerCase(Locale.ROOT).contains(q)) visibleMedia.add(m);
                 }
+                Collections.sort(visibleMedia, mediaCmp());
                 if (!visibleMedia.isEmpty()) {
                     addHeader("Photos et vidéos (" + visibleMedia.size() + ")");
                     for (MediaItem m : visibleMedia) {
@@ -477,7 +608,15 @@ public class MainActivity extends Activity {
             } else {
                 List<MediaItem> src = openAlbum != null ? repo.album(openAlbum).items : repo.all;
                 for (MediaItem m : src) if (passFilter(m)) visibleMedia.add(m);
-                addDateGrouped(visibleMedia);
+                Collections.sort(visibleMedia, mediaCmp());
+                if (sortMode == SORT_DATE || sortMode == SORT_MODIFIED) addDateGrouped(visibleMedia);
+                else {
+                    for (MediaItem m : visibleMedia) {
+                        Row r = new Row(T_MEDIA);
+                        r.media = m;
+                        rows.add(r);
+                    }
+                }
                 empty = tab == TAB_VIDEOS ? "Aucune vidéo"
                         : tab == TAB_PHOTOS ? "Aucune photo" : "Aucune photo ni vidéo";
             }
@@ -497,7 +636,7 @@ public class MainActivity extends Activity {
         int yesterdayKey = cal.get(Calendar.YEAR) * 1000 + cal.get(Calendar.DAY_OF_YEAR);
         int lastKey = -1;
         for (MediaItem m : list) {
-            cal.setTimeInMillis(m.date);
+            cal.setTimeInMillis(dateOf(m));
             int key = cal.get(Calendar.YEAR) * 1000 + cal.get(Calendar.DAY_OF_YEAR);
             if (key != lastKey) {
                 lastKey = key;
@@ -563,7 +702,7 @@ public class MainActivity extends Activity {
         ViewerActivity.sPaths = paths;
         Intent i = new Intent(this, ViewerActivity.class);
         i.putExtra("index", index);
-        i.putExtra("random", randomMode);
+        i.putExtra("random", randomOn || randomMode);
         startActivity(i);
     }
 
@@ -574,6 +713,7 @@ public class MainActivity extends Activity {
             toast("Aucune photo ou vidéo");
             return;
         }
+        setRandomOn(true);
         openViewer(list, random.nextInt(list.size()), true);
     }
 
@@ -622,6 +762,7 @@ public class MainActivity extends Activity {
 
         menu.add(0, 2, 0, "🔀").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         menu.add(0, 3, 0, "Sélectionner");
+        menu.add(0, 9, 0, "Trier…");
         menu.add(0, 4, 0, "Vue");
         menu.add(0, 5, 0, "Vidéos");
         menu.add(0, 6, 0, "Nombre de colonnes");
@@ -637,6 +778,7 @@ public class MainActivity extends Activity {
         menu.findItem(1).setVisible(!settings);
         menu.findItem(2).setVisible(!settings);
         menu.findItem(3).setVisible(!settings && !folders);
+        menu.findItem(9).setVisible(!settings);
         MenuItem view = menu.findItem(4);
         view.setVisible((tab == TAB_PHOTOS || tab == TAB_VIDEOS) && openAlbum == null && query.isEmpty());
         view.setTitle(folders ? "Tout afficher en grille" : "Afficher par dossiers");
@@ -684,6 +826,7 @@ public class MainActivity extends Activity {
                 invalidateOptionsMenu();
                 return true;
             case 6: chooseColumns(); return true;
+            case 9: chooseSort(); return true;
             case 7: createAlbum(); return true;
             case 8: reload(); return true;
         }

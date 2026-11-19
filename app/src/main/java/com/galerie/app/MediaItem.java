@@ -13,6 +13,13 @@ public class MediaItem {
     public final long date;  // ms
     public final boolean video;
     public final long duration; // ms (vidéo)
+    public long modified;       // ms (date de modification du fichier)
+    public long size = -1;      // octets (-1 = inconnu, lu à la demande)
+
+    public long size() {
+        if (size < 0) size = new File(path).length();
+        return size;
+    }
 
     public MediaItem(long id, String path, long date, boolean video, long duration) {
         this.id = id;
@@ -20,6 +27,7 @@ public class MediaItem {
         this.date = date;
         this.video = video;
         this.duration = duration;
+        this.modified = date;
     }
 
     public String name() { return new File(path).getName(); }

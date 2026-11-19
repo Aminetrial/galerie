@@ -70,7 +70,7 @@ public class ViewerActivity extends Activity {
     private LinearLayout topBar, bottom, toolRow, seekBlock;
     private TextView title, counter, timeCur, timeTotal;
     private SeekBar seek;
-    private Button playBtn, muteBtn, speedBtn, lockOverlay;
+    private Button playBtn, muteBtn, speedBtn, lockOverlay, randomFab;
     private View[] videoOnly;
 
     private MediaPlayer player;
@@ -128,7 +128,8 @@ public class ViewerActivity extends Activity {
         } else {
             paths = sPaths;
             index = getIntent().getIntExtra("index", 0);
-            randomMode = getIntent().getBooleanExtra("random", false);
+            randomMode = getIntent().getBooleanExtra("random", false)
+                    || getSharedPreferences("galerie", MODE_PRIVATE).getBoolean("random_on", false);
         }
         if (paths == null || paths.isEmpty()) {
             finish();
@@ -259,7 +260,6 @@ public class ViewerActivity extends Activity {
 
         toolRow = new LinearLayout(this);
         toolRow.setOrientation(LinearLayout.HORIZONTAL);
-        Button randBtn = btn("🔀", 18, v -> randomJump());
         Button backBtn = btn("↶", 22, v -> goBackInHistory());
         Button restartBtn = btn("↻", 22, v -> restart());
         muteBtn = btn("🔊", 18, v -> toggleMute());
@@ -268,7 +268,6 @@ public class ViewerActivity extends Activity {
         Button pipBtn = btn("PiP", 12, v -> enterPip());
         pipBtn.setTypeface(null, android.graphics.Typeface.BOLD);
         Button capBtn = btn("📷", 18, v -> capture());
-        addWeighted(toolRow, randBtn, 44);
         addWeighted(toolRow, backBtn, 44);
         addWeighted(toolRow, restartBtn, 44);
         addWeighted(toolRow, muteBtn, 44);
@@ -342,6 +341,20 @@ public class ViewerActivity extends Activity {
         ll.setMargins(dp(16), 0, 0, dp(28));
         root.addView(lockOverlay, ll);
 
+        // --- bouton « mode aléatoire » toujours visible, en bas à droite
+        randomFab = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        randomFab.setText("🔀");
+        randomFab.setTextSize(22);
+        randomFab.setMinWidth(0);
+        randomFab.setMinimumWidth(0);
+        randomFab.setPadding(0, 0, 0, 0);
+        randomFab.setOnClickListener(v -> toggleRandom());
+        FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.BOTTOM | Gravity.END);
+        rl.setMargins(0, 0, dp(16), dp(16));
+        root.addView(randomFab, rl);
+        styleRandomFab();
+        bottom.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> positionFab());
+
         setContentView(root);
 
         root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
@@ -402,6 +415,7 @@ public class ViewerActivity extends Activity {
 
     private void setControlsVisible(boolean v) {
         controlsVisible = v;
+        randomFab.setVisibility(locked || inPip() ? View.GONE : View.VISIBLE);
         if (locked) {
             topBar.setVisibility(View.GONE);
             bottom.setVisibility(View.GONE);
@@ -412,6 +426,37 @@ public class ViewerActivity extends Activity {
         topBar.setVisibility(v ? View.VISIBLE : View.GONE);
         bottom.setVisibility(v ? View.VISIBLE : View.GONE);
         if (v) scheduleAutoHide();
+        positionFab();
+        root.post(this::positionFab);
+    }
+
+    /** Le bouton aléatoire reste en bas à droite, au-dessus des commandes quand elles sont affichées. */
+    private void positionFab() {
+        if (randomFab == null) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) randomFab.getLayoutParams();
+        int want = (bottom.getVisibility() == View.VISIBLE ? bottom.getHeight() : 0) + dp(16);
+        if (lp.bottomMargin != want) {
+            lp.bottomMargin = want;
+            randomFab.setLayoutParams(lp);
+        }
+    }
+
+    private void styleRandomFab() {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(randomMode ? 0xFF42A5F5 : 0xAA222222);
+        g.setStroke(dp(2), randomMode ? 0xFFFFFFFF : 0x88FFFFFF);
+        randomFab.setBackground(g);
+        randomFab.setAlpha(randomMode ? 1f : 0.85f);
+    }
+
+    private void toggleRandom() {
+        randomMode = !randomMode;
+        getSharedPreferences("galerie", MODE_PRIVATE).edit().putBoolean("random_on", randomMode).apply();
+        styleRandomFab();
+        Toast.makeText(this, randomMode
+                ? "Mode aléatoire activé : faites défiler (↶ pour revenir en arrière)"
+                : "Mode aléatoire désactivé", Toast.LENGTH_SHORT).show();
     }
 
     private void scheduleAutoHide() {
@@ -609,11 +654,13 @@ public class ViewerActivity extends Activity {
     }
 
     private void next() {
+        if (randomMode) { randomJump(); return; }
         if (index + 1 < paths.size()) goTo(index + 1);
         else Toast.makeText(this, "Dernier élément", Toast.LENGTH_SHORT).show();
     }
 
     private void prev() {
+        if (randomMode) { goBackInHistory(); return; }
         if (index > 0) goTo(index - 1);
         else Toast.makeText(this, "Premier élément", Toast.LENGTH_SHORT).show();
     }
