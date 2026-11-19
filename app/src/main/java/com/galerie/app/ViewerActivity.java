@@ -1,6 +1,9 @@
 package com.galerie.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.widget.EditText;
+import java.util.List;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
@@ -43,7 +46,7 @@ public class ViewerActivity extends Activity {
     private ArrayList<String> paths;
     private int index;
     private boolean randomMode;
-    private final ArrayDeque<Integer> history = new ArrayDeque<>();
+    private final ArrayDeque<String> history = new ArrayDeque<>();
     private final ArrayList<Integer> shuffleBag = new ArrayList<>();
 
     private ImageView imageView;
@@ -193,6 +196,8 @@ public class ViewerActivity extends Activity {
         counter.setTextColor(0xFFBDBDBD);
         counter.setTextSize(13);
         topBar.addView(counter);
+        topBar.addView(btn("✏️", v -> renameCurrent()), new LinearLayout.LayoutParams(dp(44), dp(48)));
+        topBar.addView(btn("🗑️", v -> deleteCurrent()), new LinearLayout.LayoutParams(dp(44), dp(48)));
         root.addView(topBar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
         // --- barre du bas
@@ -398,7 +403,7 @@ public class ViewerActivity extends Activity {
 
     private void goTo(int i) {
         if (i < 0 || i >= paths.size() || i == index) return;
-        history.push(index);
+        history.push(paths.get(index));
         if (history.size() > 500) history.removeLast();
         show(i);
     }
@@ -432,7 +437,77 @@ public class ViewerActivity extends Activity {
             Toast.makeText(this, "Aucun élément précédent dans l'historique", Toast.LENGTH_SHORT).show();
             return;
         }
-        show(history.pop());
+        while (!history.isEmpty()) {
+            int i = paths.indexOf(history.pop());
+            if (i >= 0) { show(i); return; }
+        }
+        Toast.makeText(this, "Aucun élément précédent dans l'historique", Toast.LENGTH_SHORT).show();
+    }
+
+    // ------------------------------------------------------------------ renommer / supprimer
+
+    private void renameCurrent() {
+        final String old = paths.get(index);
+        final File src = new File(old);
+        final EditText et = new EditText(this);
+        et.setSingleLine(true);
+        et.setText(src.getName());
+        int dot = src.getName().lastIndexOf('.');
+        if (dot > 0) et.setSelection(0, dot); else et.selectAll();
+        FrameLayout box = new FrameLayout(this);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        box.addView(et);
+        if (isVideo) videoView.pause();
+        new AlertDialog.Builder(this)
+                .setTitle("Renommer")
+                .setView(box)
+                .setPositiveButton("OK", (d, w) -> {
+                    String n = et.getText().toString().trim();
+                    if (!FileUtil.isValidName(n) || n.equals(src.getName())) return;
+                    File dest = new File(src.getParentFile(), n);
+                    if (dest.exists()) { Toast.makeText(this, "Un fichier porte déjà ce nom", Toast.LENGTH_SHORT).show(); return; }
+                    if (!src.renameTo(dest)) { Toast.makeText(this, "Échec du renommage", Toast.LENGTH_SHORT).show(); return; }
+                    String np = dest.getAbsolutePath();
+                    paths.set(index, np);
+                    MediaRepo repo = MediaRepo.get();
+                    for (MediaItem m : repo.all) if (m.path.equals(old)) { repo.moved(m, np); break; }
+                    repo.dirty = true;
+                    List<String> scan = new ArrayList<>();
+                    scan.add(old);
+                    scan.add(np);
+                    MediaRepo.scan(this, scan);
+                    title.setText(n);
+                    Toast.makeText(this, "Renommé", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private void deleteCurrent() {
+        final String p = paths.get(index);
+        if (isVideo) videoView.pause();
+        new AlertDialog.Builder(this)
+                .setTitle("Supprimer ?")
+                .setMessage("« " + new File(p).getName() + " » sera supprimé définitivement.")
+                .setPositiveButton("Supprimer", (d, w) -> {
+                    File f = new File(p);
+                    if (f.exists() && !f.delete()) {
+                        Toast.makeText(this, "Suppression impossible", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    MediaRepo repo = MediaRepo.get();
+                    for (MediaItem m : repo.all) if (m.path.equals(p)) { MediaRepo.deleteFromMediaStore(this, m); break; }
+                    repo.removePath(this, p);
+                    repo.dirty = true;
+                    Toast.makeText(this, "Supprimé", Toast.LENGTH_SHORT).show();
+                    paths.remove(index);
+                    shuffleBag.clear();
+                    if (paths.isEmpty()) { finish(); return; }
+                    if (isVideo) videoView.stopPlayback();
+                    show(Math.min(index, paths.size() - 1));
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
     }
 
     // ------------------------------------------------------------------ vidéo

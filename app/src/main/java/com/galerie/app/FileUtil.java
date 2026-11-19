@@ -109,6 +109,19 @@ public final class FileUtil {
         }
     }
 
+    /** "photo.jpg" -> "photo (1).jpg" si le nom est déjà pris. */
+    public static File uniqueFile(File dir, String name) {
+        File f = new File(dir, name);
+        if (!f.exists()) return f;
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        for (int i = 1; ; i++) {
+            f = new File(dir, base + " (" + i + ")" + ext);
+            if (!f.exists()) return f;
+        }
+    }
+
     public static boolean isValidName(String n) {
         return n != null && !n.isEmpty() && !n.equals(".") && !n.equals("..")
                 && !n.contains("/") && !n.contains("\0");

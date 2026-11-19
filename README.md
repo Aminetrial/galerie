@@ -5,23 +5,19 @@ L'APK est compilé automatiquement par GitHub Actions et publié dans les **Rele
 
 ## Fonctions
 
-**Galerie**
-- Grille avec miniatures (photos, vidéos ▶, dossiers 📁), tri naturel
-- 🔍 Chercher un fichier ou un dossier (dans le dossier courant et ses sous-dossiers)
-- 🔀 Aléatoire (dossier courant) / Aléatoire + sous-dossiers
-- ➕ Créer un dossier
-- Appui long sur un élément : ✏️ Renommer · 📦 Déplacer · 🗑️ Supprimer (fichier ou dossier)
-- 💾 Choix du stockage : mémoire interne ou carte SD
+**🖼️ Photos** : toutes les photos et vidéos du téléphone, classées par date (Aujourd'hui, Hier, …)
+- Filtres Tout / 📷 Photos / 🎬 Vidéos, durée affichée sur les vidéos
+- Appui long = sélection multiple → Supprimer · Déplacer · Renommer · Tout sélectionner
 
-**Lecteur vidéo**
-- ⏪ -10 s · ⏸ Lecture/Pause · +10 s ⏩ · ↻ Relancer
-- Barre de progression ; double-tap à gauche/droite = -10 s / +10 s
+**📁 Albums** : tous les dossiers qui contiennent des photos/vidéos (couverture + nombre)
+- Toucher = ouvrir l'album · Appui long = Renommer / Déplacer / Supprimer l'album
+- Menu ⋮ → Nouvel album
 
-**Navigation dans la visionneuse**
-- ◀ Préc. / Suiv. ▶ (ou glisser à gauche/droite)
-- 🔀 Aléatoire sans répétition
-- ↶ Retour : revient à l'élément vu juste avant (historique)
-- Tap : afficher/masquer les commandes · glisser vers le bas : fermer
+**Partout** : 🔍 recherche (albums + fichiers) · 🔀 lecture aléatoire · taille de la grille (3/4/6)
+
+**Lecteur** : ⏪ -10 s · ⏸ Pause · +10 s ⏩ · ↻ Relancer · barre de progression · double-tap gauche/droite
+- ◀ Préc. / Suiv. ▶ (ou glisser) · 🔀 Aléatoire sans répétition · ↶ Retour (élément vu juste avant)
+- ✏️ Renommer et 🗑️ Supprimer depuis la visionneuse
 
 ## Publier avec Termux
 
