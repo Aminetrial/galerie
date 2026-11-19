@@ -5,7 +5,14 @@ import android.app.AlertDialog;
 import android.app.PictureInPictureParams;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import androidx.core.content.FileProvider;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
@@ -247,8 +254,6 @@ public class ViewerActivity extends Activity {
         counter.setTextSize(13);
         counter.setPadding(dp(8), 0, dp(4), 0);
         topBar.addView(counter);
-        topBar.addView(btn("🔄", 18, v -> rotate()), new LinearLayout.LayoutParams(dp(44), dp(48)));
-        topBar.addView(btn("⋮", 22, v -> showMenu()), new LinearLayout.LayoutParams(dp(36), dp(48)));
         root.addView(topBar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
         // --- bas : outils, progression, barre principale
@@ -260,7 +265,7 @@ public class ViewerActivity extends Activity {
         toolRow = new LinearLayout(this);
         toolRow.setOrientation(LinearLayout.HORIZONTAL);
         Button backBtn = btn("↶", 22, v -> goBackInHistory());
-        Button restartBtn = btn("↻", 22, v -> restart());
+        Button lockBtn = btn("🔓", 18, v -> toggleLock());
         muteBtn = btn("🔊", 18, v -> toggleMute());
         speedBtn = btn("1x", 14, v -> cycleSpeed());
         speedBtn.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -268,7 +273,7 @@ public class ViewerActivity extends Activity {
         pipBtn.setTypeface(null, android.graphics.Typeface.BOLD);
         Button capBtn = btn("📷", 18, v -> capture());
         addWeighted(toolRow, backBtn, 44);
-        addWeighted(toolRow, restartBtn, 44);
+        addWeighted(toolRow, lockBtn, 44);
         addWeighted(toolRow, muteBtn, 44);
         addWeighted(toolRow, speedBtn, 44);
         addWeighted(toolRow, pipBtn, 44);
@@ -304,18 +309,19 @@ public class ViewerActivity extends Activity {
         pg.setColor(0xDD1E1E1E);
         pg.setCornerRadius(dp(30));
         pill.setBackground(pg);
-        Button lockBtn = btn("🔓", 18, v -> toggleLock());
+        Button restartBtn = btn("↻", 22, v -> restart());
         Button prevBtn = btn("⏮", 20, v -> prev());
         Button backSkip = btn("-10 s", 13, v -> skip(-10000));
         playBtn = btn("⏸", 24, v -> togglePlay());
         Button fwdSkip = btn("+10 s", 13, v -> skip(10000));
         Button nextBtn = btn("⏭", 20, v -> next());
-        addWeighted(pill, lockBtn, 48);
+        addWeighted(pill, restartBtn, 48);
         addWeighted(pill, prevBtn, 48);
         addWeighted(pill, backSkip, 48);
         addWeighted(pill, playBtn, 48);
         addWeighted(pill, fwdSkip, 48);
         addWeighted(pill, nextBtn, 48);
+        addWeighted(pill, btn("⚙", 22, v -> showSettings()), 48);
         bottom.addView(pill, new LinearLayout.LayoutParams(-1, -2));
         root.addView(bottom, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
@@ -401,7 +407,10 @@ public class ViewerActivity extends Activity {
         });
         videoView.setOnCompletionListener(mp -> {
             updatePlayButton();
-            setControlsVisible(true);
+            // fin de vidéo : enchaîne sur le suivant (aléatoire si le mode 🔀 est activé)
+            if (randomMode && paths.size() > 1) randomJump();
+            else if (index + 1 < paths.size()) goTo(index + 1);
+            else setControlsVisible(true);
         });
         videoView.setOnErrorListener((mp, what, extra) -> {
             Toast.makeText(this, "Impossible de lire cette vidéo", Toast.LENGTH_SHORT).show();
@@ -513,14 +522,87 @@ public class ViewerActivity extends Activity {
         return inside(topBar, e) || inside(bottom, e) || inside(lockOverlay, e);
     }
 
-    private void showMenu() {
-        if (isVideo) videoView.pause();
-        updatePlayButton();
+    private void showSettings() {
         new AlertDialog.Builder(this)
-                .setItems(new String[]{"✏️  Renommer", "🗑️  Supprimer"}, (d, w) -> {
-                    if (w == 0) renameCurrent(); else deleteCurrent();
-                })
+                .setItems(new String[]{"ℹ️  Propriétés", "📤  Partager", "✏️  Renommer", "🗑️  Supprimer", "🔄  Tourner l'écran"},
+                        (d, w) -> {
+                            switch (w) {
+                                case 0: showProperties(); break;
+                                case 1: shareCurrent(); break;
+                                case 2: renameCurrent(); break;
+                                case 3: deleteCurrent(); break;
+                                case 4: rotate(); break;
+                            }
+                        })
                 .show();
+    }
+
+    private static String humanSize(long b) {
+        if (b < 1024) return b + " o";
+        double v = b / 1024.0;
+        String[] u = {"Ko", "Mo", "Go", "To"};
+        int i = 0;
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return String.format(Locale.FRANCE, "%.1f %s", v, u[i]);
+    }
+
+    private void showProperties() {
+        final String p = paths.get(index);
+        final boolean vid = isVideo;
+        loader.execute(() -> {
+            File f = new File(p);
+            StringBuilder sb = new StringBuilder();
+            sb.append("Nom : ").append(f.getName());
+            sb.append("\nDossier : ").append(f.getParent());
+            sb.append("\nTaille : ").append(humanSize(f.length()));
+            sb.append("\nModifié : ").append(new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE).format(new Date(f.lastModified())));
+            try {
+                if (vid) {
+                    MediaMetadataRetriever mr = new MediaMetadataRetriever();
+                    try {
+                        mr.setDataSource(p);
+                        String w = mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+                        String hh = mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+                        String rot = mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+                        String dur = mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+                        String br = mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
+                        if (w != null && hh != null) {
+                            boolean swap = "90".equals(rot) || "270".equals(rot);
+                            sb.append("\nRésolution : ").append(swap ? hh : w).append(" × ").append(swap ? w : hh);
+                        }
+                        if (dur != null) sb.append("\nDurée : ").append(FileUtil.formatTime(Integer.parseInt(dur)));
+                        if (br != null) sb.append("\nDébit : ").append(Integer.parseInt(br) / 1000).append(" kb/s");
+                    } finally {
+                        try { mr.release(); } catch (Throwable ignored) { }
+                    }
+                } else {
+                    BitmapFactory.Options o = new BitmapFactory.Options();
+                    o.inJustDecodeBounds = true;
+                    BitmapFactory.decodeFile(p, o);
+                    if (o.outWidth > 0) sb.append("\nRésolution : ").append(o.outWidth).append(" × ").append(o.outHeight);
+                }
+            } catch (Throwable ignored) { }
+            final String msg = sb.toString();
+            h.post(() -> new AlertDialog.Builder(this)
+                    .setTitle("Propriétés")
+                    .setMessage(msg)
+                    .setPositiveButton("OK", null)
+                    .show());
+        });
+    }
+
+    private void shareCurrent() {
+        File f = new File(paths.get(index));
+        try {
+            Uri u = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType(isVideo ? "video/*" : "image/*");
+            send.putExtra(Intent.EXTRA_STREAM, u);
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(send, "Partager"));
+        } catch (Exception e) {
+            Toast.makeText(this, "Partage impossible", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void setupGestures() {

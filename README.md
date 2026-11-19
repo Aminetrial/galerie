@@ -13,14 +13,15 @@ Barre du bas : **📁 Albums · 🎬 Vidéos · 🖼️ Photos · ⚙️ Réglag
 - **⚙️ Réglages** : taille de la grille, vidéos dans Photos, vues, nouvel album, actualiser
 - Menu ⋮ → Sélectionner (ou appui long) : supprimer, déplacer, renommer plusieurs éléments
 - 🔍 recherche (albums + fichiers) · 🔀 lecture aléatoire
+- **Fin de vidéo** : enchaîne automatiquement sur l'élément suivant, ou sur un élément au hasard si le mode 🔀 est activé.
 - **Format original** : miniatures entières (sans rogner), réglable (menu ⋮ → Miniatures, ou Réglages). Le lecteur affiche toujours l'image / la vidéo en entier.
 - **Bouton 🔀 en bas à droite** (accueil et lecteur) : bleu = mode aléatoire activé. Une fois activé, ouvrez une photo/vidéo puis faites défiler : « suivant » donne un élément au hasard (sans répétition), « précédent » / ↶ revient en arrière.
 - **Tri** (menu ⋮ → Trier…, ou Réglages) : date, date de modification, taille (stockage), nom (alphabétique) + « ⇅ Inverser l'ordre ». S'applique aux photos, vidéos et albums.
 
 **Lecteur vidéo plein écran** (commandes par-dessus la vidéo, masquées automatiquement)
-- Barre de progression avec temps · pastille du bas : 🔓 verrouiller · ⏮ précédent · -10 s · ⏯ · +10 s · ⏭ suivant
-- Outils : ↶ retour (élément vu juste avant) · ↻ relancer · 🔊 muet · vitesse (1x, 1.25x, 1.5x, 2x, 0.5x, 0.75x) · PiP (image dans l'image) · 📷 capture d'image (Pictures/Captures)
-- Haut : ← retour · 🔄 rotation écran · ⋮ renommer / supprimer · double-tap gauche/droite = -10 s / +10 s · glisser = précédent/suivant
+- Pastille du bas : ↻ relancer · ⏮ précédent · -10 s · ⏯ · +10 s · ⏭ suivant · ⚙ réglages (Propriétés, Partager, Renommer, Supprimer, Tourner l'écran)
+- Au-dessus : barre de progression avec temps · ↶ retour (élément vu juste avant) · 🔓 verrouiller · 🔊 muet · vitesse (1x, 1.25x, 1.5x, 2x, 0.5x, 0.75x) · PiP · 📷 capture d'image (Pictures/Captures)
+- Double-tap gauche/droite = -10 s / +10 s · glisser = précédent/suivant · bouton 🔀 en bas à droite = mode aléatoire
 
 ## Publier avec Termux
 
