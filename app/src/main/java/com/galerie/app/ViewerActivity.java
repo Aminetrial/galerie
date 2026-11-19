@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,6 +21,7 @@ import android.widget.ImageButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -58,7 +60,7 @@ public class ViewerActivity extends Activity {
     private ImageView imageView;
     private VideoView videoView;
     private LinearLayout topBar, bottom, seekBlock;
-    private TextView title, counter, timeCur, timeTotal;
+    private TextView title, folderView, counter, timeCur, timeTotal;
     private SeekBar seek;
     private ImageButton restartBtn, playBtn, randomBtn;
     private View divider1;
@@ -238,17 +240,29 @@ public class ViewerActivity extends Activity {
         ImageButton back = ibtn(R.drawable.ic_back, v -> finish());
         back.setPadding(dp(12), dp(12), dp(12), dp(12));
         topBar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout titleCol = new LinearLayout(this);
+        titleCol.setOrientation(LinearLayout.VERTICAL);
         title = new TextView(this);
         title.setTextColor(Color.WHITE);
         title.setTextSize(14);
         title.setSingleLine(true);
         title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-        topBar.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        titleCol.addView(title);
+        folderView = new TextView(this);
+        folderView.setTextColor(0xFF9FB8E8);
+        folderView.setTextSize(12);
+        folderView.setSingleLine(true);
+        folderView.setEllipsize(android.text.TextUtils.TruncateAt.START);
+        titleCol.addView(folderView);
+        topBar.addView(titleCol, new LinearLayout.LayoutParams(0, -2, 1));
         counter = new TextView(this);
         counter.setTextColor(0xFFBDBDBD);
         counter.setTextSize(13);
         counter.setPadding(dp(8), 0, 0, 0);
         topBar.addView(counter);
+        ImageButton more = ibtn(R.drawable.ic_more, v -> showMenu(v));
+        more.setPadding(dp(12), dp(12), dp(12), dp(12));
+        topBar.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
         root.addView(topBar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
         // --- bas : progression (vidéo) + barre de commandes
@@ -396,6 +410,123 @@ public class ViewerActivity extends Activity {
         if (isVideo || photoDelay > 0) h.postDelayed(autoHide, 4000);
     }
 
+    // ------------------------------------------------------------------ menu : dossier, déplacer, supprimer
+
+    private void updateFolderLabel(File f) {
+        File parent = f.getParentFile();
+        String p = parent != null ? parent.getAbsolutePath() : "";
+        String root = android.os.Environment.getExternalStorageDirectory().getAbsolutePath();
+        if (p.startsWith(root)) p = "Stockage" + p.substring(root.length());
+        folderView.setText("📁 " + p);
+    }
+
+    private MediaItem currentItem() {
+        String p = paths.get(index);
+        for (MediaItem m : MediaRepo.get().all) if (m.path.equals(p)) return m;
+        return null;
+    }
+
+    private void showMenu(View anchor) {
+        h.removeCallbacks(autoHide);
+        PopupMenu pm = new PopupMenu(this, anchor);
+        pm.getMenu().add(0, 1, 0, "Déplacer vers…");
+        pm.getMenu().add(0, 2, 0, "Supprimer");
+        pm.getMenu().add(0, 3, 0, "Infos et dossier");
+        pm.setOnMenuItemClickListener(it -> {
+            if (it.getItemId() == 1) moveCurrent();
+            else if (it.getItemId() == 2) deleteCurrent();
+            else showInfo();
+            return true;
+        });
+        pm.setOnDismissListener(m -> scheduleAutoHide());
+        pm.show();
+    }
+
+    private void showInfo() {
+        File f = new File(paths.get(index));
+        String size = f.length() >= 1048576
+                ? String.format(java.util.Locale.ROOT, "%.1f Mo", f.length() / 1048576.0)
+                : (f.length() / 1024) + " Ko";
+        String date = new java.text.SimpleDateFormat("d MMMM yyyy HH:mm", java.util.Locale.FRANCE)
+                .format(new java.util.Date(f.lastModified()));
+        new AlertDialog.Builder(this)
+                .setTitle("Infos")
+                .setMessage("Nom : " + f.getName() + "\n\nDossier :\n" + f.getParent()
+                        + "\n\nTaille : " + size + "\nModifié : " + date)
+                .setPositiveButton("OK", null)
+                .show();
+    }
+
+    private void deleteCurrent() {
+        final String path = paths.get(index);
+        new AlertDialog.Builder(this)
+                .setTitle("Supprimer ce fichier ?")
+                .setMessage(new File(path).getName() + "\n\nCette action est définitive.")
+                .setPositiveButton("Supprimer", (d, w) -> {
+                    if (isVideo) videoView.stopPlayback();
+                    File f = new File(path);
+                    if (!f.delete() && f.exists()) {
+                        Toast.makeText(this, "Impossible de supprimer", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    MediaRepo repo = MediaRepo.get();
+                    MediaItem m = null;
+                    for (MediaItem x : repo.all) if (x.path.equals(path)) { m = x; break; }
+                    if (m != null) {
+                        MediaRepo.deleteFromMediaStore(this, m);
+                        repo.removed(this, Collections.singletonList(m));
+                    }
+                    MediaRepo.scan(this, Collections.singletonList(path));
+                    repo.dirty = true;
+                    paths.remove(index);
+                    shuffleBag.clear();
+                    Toast.makeText(this, "Fichier supprimé", Toast.LENGTH_SHORT).show();
+                    if (paths.isEmpty()) { finish(); return; }
+                    show(Math.min(index, paths.size() - 1));
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private void moveCurrent() {
+        final String path = paths.get(index);
+        final File src = new File(path);
+        FolderPicker.show(this, src.getParentFile(), dest -> {
+            File parent = src.getParentFile();
+            if (parent != null && parent.equals(dest)) {
+                Toast.makeText(this, "Déjà dans ce dossier", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            final File dst = FileUtil.uniqueFile(dest, src.getName());
+            final int at = index;
+            new Thread(() -> {
+                final boolean ok = src.renameTo(dst) || FileUtil.copyThenDelete(src, dst);
+                h.post(() -> {
+                    if (!ok) {
+                        Toast.makeText(this, "Impossible de déplacer", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    MediaRepo repo = MediaRepo.get();
+                    for (MediaItem x : repo.all) {
+                        if (x.path.equals(path)) { repo.moved(x, dst.getAbsolutePath()); break; }
+                    }
+                    repo.rebuildAlbums(this);
+                    java.util.List<String> touched = new ArrayList<>();
+                    touched.add(path);
+                    touched.add(dst.getAbsolutePath());
+                    MediaRepo.scan(this, touched);
+                    repo.dirty = true;
+                    if (at < paths.size()) paths.set(at, dst.getAbsolutePath());
+                    if (at == index) {
+                        title.setText(dst.getName());
+                        updateFolderLabel(dst);
+                    }
+                    Toast.makeText(this, "Déplacé vers " + dest.getName(), Toast.LENGTH_SHORT).show();
+                });
+            }).start();
+        });
+    }
+
     // ------------------------------------------------------------------ gestes
 
     private boolean inside(View v, MotionEvent e) {
@@ -466,6 +597,7 @@ public class ViewerActivity extends Activity {
         final String p = paths.get(i);
         final File f = new File(p);
         title.setText(f.getName());
+        updateFolderLabel(f);
         counter.setText((i + 1) + " / " + paths.size());
         final int token = ++loadToken;
         h.removeCallbacks(slideNext);
