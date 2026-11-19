@@ -5,15 +5,13 @@
     <color name="bar">#FF171A21</color>
     <color name="accent">#FF5B9CFF</color>
 
-    <style name="AppTheme" parent="android:Theme.Material">
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorPrimary">@color/bar</item>
         <item name="android:colorPrimaryDark">@color/bg</item>
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:statusBarColor">@color/bar</item>
         <item name="android:navigationBarColor">@color/bar</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Activity</item>
     </style>
 
     <style name="ViewerTheme" parent="android:Theme.Material.NoActionBar.Fullscreen">

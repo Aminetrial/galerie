@@ -52,3 +52,6 @@ si le dépôt est public, n'importe qui pourrait signer un APK « Galerie » ave
 
 ## Apparence (v14)
 Thème sombre bleu, icônes vectorielles (barre du bas, lecteur), icône adaptative (Android 13 : icône monochrome), écran de démarrage, miniatures arrondies avec badge durée, fondus, retour haptique, plein écran immersif dans le lecteur.
+
+## v17 — interface réécrite
+Nouvelle MainActivity (barre du haut maison, recherche intégrée, sélection avec suppression / déplacement / renommage, menus ⋮), thème sans ActionBar, réglages en cartes, journal de diagnostic dans Réglages.
