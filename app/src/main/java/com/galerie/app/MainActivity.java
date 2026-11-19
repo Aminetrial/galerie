@@ -137,6 +137,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        CrashLog.start();
         repo = MediaRepo.get();
         thumbs = new ThumbLoader(this);
         SharedPreferences p = prefs();
