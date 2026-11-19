@@ -15,9 +15,9 @@ L'APK est compilé automatiquement par GitHub Actions et publié dans les **Rele
 
 **Partout** : 🔍 recherche (albums + fichiers) · 🔀 lecture aléatoire · taille de la grille (3/4/6)
 
-**Lecteur** : ⏪ -10 s · ⏸ Pause · +10 s ⏩ · ↻ Relancer · barre de progression · double-tap gauche/droite
-- ◀ Préc. / Suiv. ▶ (ou glisser) · 🔀 Aléatoire sans répétition · ↶ Retour (élément vu juste avant)
-- ✏️ Renommer et 🗑️ Supprimer depuis la visionneuse
+**Lecteur** : barre du bas (vidéo seulement) : ⏪ -10 s · ⏸ Pause · +10 s ⏩ · ↻ Relancer · barre de progression · double-tap gauche/droite
+- Flèches ‹ › sur les côtés (ou glisser) : élément précédent / suivant dans l'ordre
+- En haut : ↶ Retour (élément vu juste avant) · 🔀 Aléatoire (sans répétition) · ⋮ Renommer / Supprimer
 
 ## Publier avec Termux
 

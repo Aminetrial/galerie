@@ -54,7 +54,7 @@ public class ViewerActivity extends Activity {
     private LinearLayout topBar, bottomBar, videoControls;
     private TextView title, counter, timeText;
     private SeekBar seek;
-    private Button playBtn, randomBtn;
+    private Button playBtn, prevBtn, nextBtn;
     private boolean controlsVisible = true;
     private boolean userSeeking = false;
     private boolean isVideo = false;
@@ -176,7 +176,7 @@ public class ViewerActivity extends Activity {
         root.addView(imageView, new FrameLayout.LayoutParams(-1, -1));
 
         videoView = new VideoView(this);
-        root.addView(videoView, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        root.addView(videoView, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
 
         // --- barre du haut
         topBar = new LinearLayout(this);
@@ -196,9 +196,20 @@ public class ViewerActivity extends Activity {
         counter.setTextColor(0xFFBDBDBD);
         counter.setTextSize(13);
         topBar.addView(counter);
-        topBar.addView(btn("✏️", v -> renameCurrent()), new LinearLayout.LayoutParams(dp(44), dp(48)));
-        topBar.addView(btn("🗑️", v -> deleteCurrent()), new LinearLayout.LayoutParams(dp(44), dp(48)));
+        topBar.addView(btn("↶", v -> goBackInHistory()), new LinearLayout.LayoutParams(dp(44), dp(48)));
+        topBar.addView(btn("🔀", v -> randomJump()), new LinearLayout.LayoutParams(dp(44), dp(48)));
+        topBar.addView(btn("⋮", v -> showMenu()), new LinearLayout.LayoutParams(dp(36), dp(48)));
         root.addView(topBar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
+
+        // --- flèches précédent / suivant sur les côtés
+        prevBtn = btn("‹", v -> prev());
+        prevBtn.setTextSize(32);
+        prevBtn.setBackgroundColor(0x44000000);
+        root.addView(prevBtn, new FrameLayout.LayoutParams(dp(40), dp(96), Gravity.START | Gravity.CENTER_VERTICAL));
+        nextBtn = btn("›", v -> next());
+        nextBtn.setTextSize(32);
+        nextBtn.setBackgroundColor(0x44000000);
+        root.addView(nextBtn, new FrameLayout.LayoutParams(dp(40), dp(96), Gravity.END | Gravity.CENTER_VERTICAL));
 
         // --- barre du bas
         bottomBar = new LinearLayout(this);
@@ -231,15 +242,6 @@ public class ViewerActivity extends Activity {
         addWeighted(vRow, btn("↻ Relancer", v -> restart()));
         videoControls.addView(vRow);
         bottomBar.addView(videoControls);
-
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        addWeighted(nav, btn("◀ Préc.", v -> prev()));
-        addWeighted(nav, btn("↶ Retour", v -> goBackInHistory()));
-        randomBtn = btn("🔀 Aléatoire", v -> randomJump());
-        addWeighted(nav, randomBtn);
-        addWeighted(nav, btn("Suiv. ▶", v -> next()));
-        bottomBar.addView(nav);
 
         root.addView(bottomBar, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
         setContentView(root);
@@ -288,7 +290,9 @@ public class ViewerActivity extends Activity {
     private void setControlsVisible(boolean v) {
         controlsVisible = v;
         topBar.setVisibility(v ? View.VISIBLE : View.GONE);
-        bottomBar.setVisibility(v ? View.VISIBLE : View.GONE);
+        prevBtn.setVisibility(v ? View.VISIBLE : View.GONE);
+        nextBtn.setVisibility(v ? View.VISIBLE : View.GONE);
+        bottomBar.setVisibility(v && isVideo ? View.VISIBLE : View.GONE);
         if (v) scheduleAutoHide();
     }
 
@@ -305,6 +309,19 @@ public class ViewerActivity extends Activity {
         return v.getGlobalVisibleRect(r) && r.contains((int) e.getRawX(), (int) e.getRawY());
     }
 
+    private boolean onControls(MotionEvent e) {
+        return inside(topBar, e) || inside(bottomBar, e) || inside(prevBtn, e) || inside(nextBtn, e);
+    }
+
+    private void showMenu() {
+        if (isVideo) videoView.pause();
+        new AlertDialog.Builder(this)
+                .setItems(new String[]{"✏️  Renommer", "🗑️  Supprimer"}, (d, w) -> {
+                    if (w == 0) renameCurrent(); else deleteCurrent();
+                })
+                .show();
+    }
+
     private void setupGestures() {
         gestures = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
@@ -314,14 +331,14 @@ public class ViewerActivity extends Activity {
 
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
-                if (inside(topBar, e) || inside(bottomBar, e)) return false;
+                if (onControls(e)) return false;
                 setControlsVisible(!controlsVisible);
                 return true;
             }
 
             @Override
             public boolean onDoubleTap(MotionEvent e) {
-                if (!isVideo || inside(topBar, e) || inside(bottomBar, e)) return false;
+                if (!isVideo || onControls(e)) return false;
                 // double-tap côté gauche = -10 s, côté droit = +10 s
                 int w = getResources().getDisplayMetrics().widthPixels;
                 skip(e.getRawX() < w / 2f ? -10000 : 10000);
@@ -330,7 +347,7 @@ public class ViewerActivity extends Activity {
 
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
-                if (e1 == null || inside(topBar, e1) || inside(bottomBar, e1)) return false;
+                if (e1 == null || onControls(e1)) return false;
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > dp(80)) {
@@ -409,13 +426,11 @@ public class ViewerActivity extends Activity {
     }
 
     private void next() {
-        if (randomMode) { randomJump(); return; }
         if (index + 1 < paths.size()) goTo(index + 1);
         else Toast.makeText(this, "Dernier élément", Toast.LENGTH_SHORT).show();
     }
 
     private void prev() {
-        if (randomMode) { goBackInHistory(); return; }
         if (index > 0) goTo(index - 1);
         else Toast.makeText(this, "Premier élément", Toast.LENGTH_SHORT).show();
     }
