@@ -124,7 +124,6 @@ public class ViewerActivity extends Activity {
             index = state.getInt("index", 0);
             resumePos = state.getInt("pos", -1);
             randomMode = state.getBoolean("random", false);
-            aspectFill = state.getBoolean("fill", false);
         } else {
             paths = sPaths;
             index = getIntent().getIntExtra("index", 0);
@@ -311,14 +310,12 @@ public class ViewerActivity extends Activity {
         playBtn = btn("⏸", 24, v -> togglePlay());
         Button fwdSkip = btn("+10 s", 13, v -> skip(10000));
         Button nextBtn = btn("⏭", 20, v -> next());
-        Button aspectBtn = btn("⛶", 20, v -> toggleAspect());
         addWeighted(pill, lockBtn, 48);
         addWeighted(pill, prevBtn, 48);
         addWeighted(pill, backSkip, 48);
         addWeighted(pill, playBtn, 48);
         addWeighted(pill, fwdSkip, 48);
         addWeighted(pill, nextBtn, 48);
-        addWeighted(pill, aspectBtn, 48);
         bottom.addView(pill, new LinearLayout.LayoutParams(-1, -2));
         root.addView(bottom, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 

@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
     private boolean includeVideos = false;  // onglet Photos : inclure les vidéos
     private boolean photosFolders = false;  // onglet Photos : vue par dossiers (sinon grille)
     private boolean videosFolders = true;   // onglet Vidéos : vue par dossiers (sinon grille)
+    private boolean thumbsOriginal = true;  // miniatures entières (format original) au lieu de carrées rognées
     private boolean randomOn = false;       // mode aléatoire (partagé avec la visionneuse)
     private Button randomFab;
     private int sortMode = SORT_DATE;
@@ -110,7 +111,7 @@ public class MainActivity extends Activity {
     private final TextView[] chips = new TextView[3];
     private final TextView[] navItems = new TextView[4];
     private ScrollView settingsView;
-    private final TextView[] setRows = new TextView[7];
+    private final TextView[] setRows = new TextView[8];
     private TextView emptyView;
     private ProgressBar progress;
     private LinearLayout permissionView;
@@ -143,6 +144,7 @@ public class MainActivity extends Activity {
         photosFolders = p.getBoolean("photos_folders", false);
         videosFolders = p.getBoolean("videos_folders", true);
         randomOn = p.getBoolean("random_on", false);
+        thumbsOriginal = p.getBoolean("thumbs_original", true);
         sortMode = p.getInt("sort_mode", SORT_DATE);
         sortRev = p.getBoolean("sort_rev", false);
         if (state != null) {
@@ -355,6 +357,7 @@ public class MainActivity extends Activity {
         View.OnClickListener[] actions = {
                 v -> chooseColumns(),
                 v -> chooseSort(),
+                v -> toggleThumbs(),
                 v -> { includeVideos = !includeVideos; prefs().edit().putBoolean("inc_video", includeVideos).apply(); refreshSettings(); },
                 v -> { photosFolders = !photosFolders; prefs().edit().putBoolean("photos_folders", photosFolders).apply(); refreshSettings(); },
                 v -> { videosFolders = !videosFolders; prefs().edit().putBoolean("videos_folders", videosFolders).apply(); refreshSettings(); },
@@ -386,11 +389,24 @@ public class MainActivity extends Activity {
     private void refreshSettings() {
         setRow(setRows[0], "Taille de la grille", cols + " éléments par ligne");
         setRow(setRows[1], "Trier par", sortLabel(sortMode) + " — " + sortDirection(sortMode));
-        setRow(setRows[2], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
-        setRow(setRows[3], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille");
-        setRow(setRows[4], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille");
-        setRow(setRows[5], "Nouvel album", "Créer un dossier dans Pictures");
-        setRow(setRows[6], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
+        setRow(setRows[2], "Miniatures", thumbsOriginal ? "Format original (image entière, sans rogner)" : "Carrées (rognées)");
+        setRow(setRows[3], "Vidéos dans l'onglet Photos", includeVideos ? "Incluses" : "Exclues");
+        setRow(setRows[4], "Onglet Photos", photosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[5], "Onglet Vidéos", videosFolders ? "Affiché par dossiers" : "Affiché en grille");
+        setRow(setRows[6], "Nouvel album", "Créer un dossier dans Pictures");
+        setRow(setRows[7], "Actualiser la bibliothèque", "Relire toutes les photos et vidéos");
+    }
+
+    private void toggleThumbs() {
+        thumbsOriginal = !thumbsOriginal;
+        prefs().edit().putBoolean("thumbs_original", thumbsOriginal).apply();
+        refreshSettings();
+        adapter.notifyDataSetChanged();
+        invalidateOptionsMenu();
+    }
+
+    private ImageView.ScaleType thumbScale() {
+        return thumbsOriginal ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP;
     }
 
     private void styleRandomFab() {
@@ -763,6 +779,7 @@ public class MainActivity extends Activity {
         menu.add(0, 2, 0, "🔀").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         menu.add(0, 3, 0, "Sélectionner");
         menu.add(0, 9, 0, "Trier…");
+        menu.add(0, 10, 0, "Miniatures");
         menu.add(0, 4, 0, "Vue");
         menu.add(0, 5, 0, "Vidéos");
         menu.add(0, 6, 0, "Nombre de colonnes");
@@ -779,6 +796,9 @@ public class MainActivity extends Activity {
         menu.findItem(2).setVisible(!settings);
         menu.findItem(3).setVisible(!settings && !folders);
         menu.findItem(9).setVisible(!settings);
+        MenuItem th = menu.findItem(10);
+        th.setVisible(!settings);
+        th.setTitle(thumbsOriginal ? "Miniatures : carrées (rognées)" : "Miniatures : format original");
         MenuItem view = menu.findItem(4);
         view.setVisible((tab == TAB_PHOTOS || tab == TAB_VIDEOS) && openAlbum == null && query.isEmpty());
         view.setTitle(folders ? "Tout afficher en grille" : "Afficher par dossiers");
@@ -827,6 +847,7 @@ public class MainActivity extends Activity {
                 return true;
             case 6: chooseColumns(); return true;
             case 9: chooseSort(); return true;
+            case 10: toggleThumbs(); return true;
             case 7: createAlbum(); return true;
             case 8: reload(); return true;
         }
@@ -1325,7 +1346,7 @@ public class MainActivity extends Activity {
                 vh.name.setText(r.album.name);
                 vh.count.setText(String.valueOf(r.count));
                 if (r.cover != null) {
-                    vh.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    vh.image.setScaleType(thumbScale());
                     thumbs.load(r.cover, vh.image);
                 } else {
                     vh.image.setTag(null);
@@ -1335,6 +1356,7 @@ public class MainActivity extends Activity {
             } else if (holder instanceof MediaVH) {
                 MediaVH vh = (MediaVH) holder;
                 MediaItem m = r.media;
+                vh.image.setScaleType(thumbScale());
                 thumbs.load(m, vh.image);
                 if (m.video) {
                     vh.badge.setVisibility(View.VISIBLE);
