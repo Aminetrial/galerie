@@ -254,7 +254,8 @@ public class ViewerActivity extends Activity {
         folderView.setSingleLine(true);
         folderView.setEllipsize(android.text.TextUtils.TruncateAt.START);
         titleCol.addView(folderView);
-        topBar.addView(titleCol, new LinearLayout.LayoutParams(0, -2, 1));
+        // nom et dossier : visibles seulement dans le menu ⋮ → Propriétés
+        topBar.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
         counter = new TextView(this);
         counter.setTextColor(0xFFBDBDBD);
         counter.setTextSize(13);
@@ -432,7 +433,7 @@ public class ViewerActivity extends Activity {
         pm.getMenu().add(0, 4, 0, "Partager");
         pm.getMenu().add(0, 1, 0, "Déplacer vers…");
         pm.getMenu().add(0, 2, 0, "Supprimer");
-        pm.getMenu().add(0, 3, 0, "Infos et dossier");
+        pm.getMenu().add(0, 3, 0, "Propriétés");
         pm.setOnMenuItemClickListener(it -> {
             if (it.getItemId() == 4) Share.send(this, Collections.singletonList(paths.get(index)));
             else if (it.getItemId() == 1) moveCurrent();
@@ -452,7 +453,7 @@ public class ViewerActivity extends Activity {
         String date = new java.text.SimpleDateFormat("d MMMM yyyy HH:mm", java.util.Locale.FRANCE)
                 .format(new java.util.Date(f.lastModified()));
         new AlertDialog.Builder(this)
-                .setTitle("Infos")
+                .setTitle("Propriétés")
                 .setMessage("Nom : " + f.getName() + "\n\nDossier :\n" + f.getParent()
                         + "\n\nTaille : " + size + "\nModifié : " + date)
                 .setPositiveButton("OK", null)
