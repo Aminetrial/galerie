@@ -49,3 +49,6 @@ Android demande l'autorisation **« Accès à tous les fichiers »** : activez-l
 L'APK est signé avec `app/galerie.keystore` (inclus dans le projet) pour que les mises à jour
 s'installent par-dessus l'ancienne version. Pour un usage personnel c'est suffisant ;
 si le dépôt est public, n'importe qui pourrait signer un APK « Galerie » avec cette clé.
+
+## Apparence (v14)
+Thème sombre bleu, icônes vectorielles (barre du bas, lecteur), icône adaptative (Android 13 : icône monochrome), écran de démarrage, miniatures arrondies avec badge durée, fondus, retour haptique, plein écran immersif dans le lecteur.

@@ -16,6 +16,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -59,7 +60,7 @@ public class ViewerActivity extends Activity {
     private LinearLayout topBar, bottom, seekBlock;
     private TextView title, counter, timeCur, timeTotal;
     private SeekBar seek;
-    private Button restartBtn, playBtn, randomBtn;
+    private ImageButton restartBtn, playBtn, randomBtn;
     private View divider1;
 
     private boolean controlsVisible = true;
@@ -106,6 +107,9 @@ public class ViewerActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
 
         android.content.SharedPreferences prefs = getSharedPreferences("galerie", MODE_PRIVATE);
         photoDelay = prefs.getInt("photo_delay", 0);
@@ -187,6 +191,21 @@ public class ViewerActivity extends Activity {
         return b;
     }
 
+    private ImageButton ibtn(int res, View.OnClickListener l) {
+        ImageButton b = new ImageButton(this);
+        b.setImageResource(res);
+        b.setColorFilter(Color.WHITE);
+        b.setBackground(null);
+        b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        b.setPadding(dp(14), dp(12), dp(14), dp(12));
+        b.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+            l.onClick(v);
+            scheduleAutoHide();
+        });
+        return b;
+    }
+
     private GradientDrawable gradient(boolean fromTop) {
         return new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 fromTop ? new int[]{0xCC000000, 0x00000000} : new int[]{0x00000000, 0xCC000000});
@@ -215,7 +234,9 @@ public class ViewerActivity extends Activity {
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackground(gradient(true));
         topBar.setPadding(dp(4), dp(4), dp(12), dp(16));
-        topBar.addView(btn("←", 24, v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+        ImageButton back = ibtn(R.drawable.ic_back, v -> finish());
+        back.setPadding(dp(12), dp(12), dp(12), dp(12));
+        topBar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
         title = new TextView(this);
         title.setTextColor(Color.WHITE);
         title.setTextSize(14);
@@ -261,15 +282,15 @@ public class ViewerActivity extends Activity {
         pill.setGravity(Gravity.CENTER_VERTICAL);
         pill.setPadding(dp(6), dp(4), dp(6), dp(4));
         GradientDrawable pg = new GradientDrawable();
-        pg.setColor(0xDD1E1E1E);
+        pg.setColor(0xE6171A21);
         pg.setCornerRadius(dp(30));
         pill.setBackground(pg);
 
-        restartBtn = btn("↻", 24, v -> restart());
-        Button prevBtn = btn("⏮", 22, v -> prev());
-        playBtn = btn("⏸", 28, v -> togglePlay());
-        Button nextBtn = btn("⏭", 22, v -> next());
-        randomBtn = btn("🔀", 22, v -> toggleRandom());
+        restartBtn = ibtn(R.drawable.ic_restart, v -> restart());
+        ImageButton prevBtn = ibtn(R.drawable.ic_prev, v -> prev());
+        playBtn = ibtn(R.drawable.ic_pause, v -> togglePlay());
+        ImageButton nextBtn = ibtn(R.drawable.ic_next, v -> next());
+        randomBtn = ibtn(R.drawable.ic_shuffle, v -> toggleRandom());
 
         pill.addView(restartBtn, new LinearLayout.LayoutParams(0, dp(52), 1));
         divider1 = divider();
@@ -330,9 +351,9 @@ public class ViewerActivity extends Activity {
     private void styleRandomBtn() {
         GradientDrawable g = new GradientDrawable();
         g.setCornerRadius(dp(26));
-        g.setColor(randomMode ? 0xFF42A5F5 : 0x00000000);
+        g.setColor(randomMode ? 0xFF5B9CFF : 0x00000000);
         randomBtn.setBackground(g);
-        randomBtn.setAlpha(randomMode ? 1f : 0.55f);
+        randomBtn.setColorFilter(randomMode ? Color.BLACK : 0x99FFFFFF);
     }
 
     private void toggleRandom() {
@@ -354,9 +375,19 @@ public class ViewerActivity extends Activity {
 
     private void setControlsVisible(boolean v) {
         controlsVisible = v;
-        topBar.setVisibility(v ? View.VISIBLE : View.GONE);
-        bottom.setVisibility(v ? View.VISIBLE : View.GONE);
+        fade(topBar, v);
+        fade(bottom, v);
         if (v) scheduleAutoHide();
+    }
+
+    private void fade(final View view, boolean show) {
+        view.animate().cancel();
+        if (show) {
+            view.setVisibility(View.VISIBLE);
+            view.animate().alpha(1f).setDuration(150).start();
+        } else {
+            view.animate().alpha(0f).setDuration(150).withEndAction(() -> view.setVisibility(View.GONE)).start();
+        }
     }
 
     private void scheduleAutoHide() {
@@ -430,6 +461,7 @@ public class ViewerActivity extends Activity {
 
     private void show(int i) {
         index = i;
+        if (root != null) root.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
         final String p = paths.get(i);
         final File f = new File(p);
         title.setText(f.getName());
@@ -465,7 +497,11 @@ public class ViewerActivity extends Activity {
                 final Bitmap res = bm;
                 h.post(() -> {
                     if (token != loadToken) return;
-                    if (res != null) imageView.setImageBitmap(res);
+                    if (res != null) {
+                        imageView.setImageBitmap(res);
+                        imageView.setAlpha(0f);
+                        imageView.animate().alpha(1f).setDuration(180).start();
+                    }
                     else Toast.makeText(this, "Impossible d'afficher cette image", Toast.LENGTH_SHORT).show();
                 });
             });
@@ -571,7 +607,7 @@ public class ViewerActivity extends Activity {
     private void updatePlayButton() {
         h.postDelayed(() -> {
             boolean playing = isVideo ? videoView.isPlaying() : !slidePaused;
-            playBtn.setText(playing ? "⏸" : "▶");
+            playBtn.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
         }, 100);
     }
 }

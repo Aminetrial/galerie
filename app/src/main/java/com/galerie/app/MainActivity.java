@@ -110,7 +110,7 @@ public class MainActivity extends Activity {
     private GridAdapter adapter;
     private LinearLayout chipsRow;
     private final TextView[] chips = new TextView[3];
-    private final TextView[] navItems = new TextView[4];
+    private final LinearLayout[] navItems = new LinearLayout[4];
     private ScrollView settingsView;
     private final TextView[] setRows = new TextView[11];
     private TextView emptyView;
@@ -231,7 +231,7 @@ public class MainActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(0xFF121212);
+        root.setBackgroundColor(0xFF0F1115);
 
         LinearLayout main = new LinearLayout(this);
         main.setOrientation(LinearLayout.VERTICAL);
@@ -246,7 +246,7 @@ public class MainActivity extends Activity {
         chipsRow = new LinearLayout(this);
         chipsRow.setOrientation(LinearLayout.HORIZONTAL);
         chipsRow.setPadding(dp(8), dp(6), dp(8), dp(6));
-        String[] labels = {"Tout", "📷 Photos", "🎬 Vidéos"};
+        String[] labels = {"Tout", "Photos", "Vidéos"};
         for (int i = 0; i < 3; i++) {
             final int f = i;
             TextView c = new TextView(this);
@@ -289,6 +289,11 @@ public class MainActivity extends Activity {
         emptyView.setTextSize(15);
         emptyView.setGravity(Gravity.CENTER);
         emptyView.setPadding(dp(32), 0, dp(32), 0);
+        android.graphics.drawable.Drawable ed = getResources().getDrawable(R.drawable.ic_empty).mutate();
+        ed.setTint(0xFF3A3F49);
+        ed.setBounds(0, 0, dp(72), dp(72));
+        emptyView.setCompoundDrawables(null, ed, null, null);
+        emptyView.setCompoundDrawablePadding(dp(16));
         emptyView.setVisibility(View.GONE);
         gridBox.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
 
@@ -298,16 +303,27 @@ public class MainActivity extends Activity {
         // barre du bas : Albums | Vidéos | Photos | Réglages
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setBackgroundColor(0xFF1A1A1A);
-        String[] navLabels = {"📁\nAlbums", "🎬\nVidéos", "🖼️\nPhotos", "⚙️\nRéglages"};
+        nav.setBackgroundColor(0xFF171A21);
+        nav.setElevation(dp(8));
+        String[] navLabels = {"Albums", "Vidéos", "Photos", "Réglages"};
+        int[] navIcons = {R.drawable.ic_nav_albums, R.drawable.ic_nav_videos, R.drawable.ic_nav_photos, R.drawable.ic_nav_settings};
         for (int i = 0; i < 4; i++) {
             final int t = i;
-            TextView n = new TextView(this);
-            n.setText(navLabels[i]);
+            LinearLayout n = new LinearLayout(this);
+            n.setOrientation(LinearLayout.VERTICAL);
             n.setGravity(Gravity.CENTER);
-            n.setTextSize(12);
-            n.setOnClickListener(v -> setTab(t));
-            nav.addView(n, new LinearLayout.LayoutParams(0, dp(60), 1));
+            ImageView ic = new ImageView(this);
+            ic.setImageResource(navIcons[i]);
+            ic.setPadding(dp(18), dp(4), dp(18), dp(4));
+            n.addView(ic, new LinearLayout.LayoutParams(dp(64), dp(32)));
+            TextView lb = new TextView(this);
+            lb.setText(navLabels[i]);
+            lb.setTextSize(11);
+            lb.setGravity(Gravity.CENTER);
+            lb.setPadding(0, dp(2), 0, 0);
+            n.addView(lb, new LinearLayout.LayoutParams(-2, -2));
+            n.setOnClickListener(v -> { v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); setTab(t); });
+            nav.addView(n, new LinearLayout.LayoutParams(0, dp(64), 1));
             navItems[i] = n;
         }
         main.addView(nav, new LinearLayout.LayoutParams(-1, -2));
@@ -319,15 +335,35 @@ public class MainActivity extends Activity {
         permissionView.setOrientation(LinearLayout.VERTICAL);
         permissionView.setGravity(Gravity.CENTER);
         permissionView.setPadding(dp(32), dp(32), dp(32), dp(32));
-        permissionView.setBackgroundColor(0xFF121212);
+        permissionView.setBackgroundColor(0xFF0F1115);
+        ImageView pic = new ImageView(this);
+        pic.setImageResource(R.drawable.ic_nav_photos);
+        pic.setColorFilter(0xFF5B9CFF);
+        permissionView.addView(pic, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        TextView ptitle = new TextView(this);
+        ptitle.setText("Bienvenue dans Galerie");
+        ptitle.setTextColor(Color.WHITE);
+        ptitle.setTextSize(22);
+        ptitle.setTypeface(null, Typeface.BOLD);
+        ptitle.setGravity(Gravity.CENTER);
+        ptitle.setPadding(0, dp(20), 0, dp(10));
+        permissionView.addView(ptitle);
         TextView msg = new TextView(this);
         msg.setText("La galerie a besoin d'accéder à vos fichiers pour afficher, renommer, déplacer et supprimer vos photos et vidéos.");
-        msg.setTextColor(Color.WHITE);
+        msg.setTextColor(0xFFB6BBC4);
         msg.setGravity(Gravity.CENTER);
         msg.setTextSize(16);
         permissionView.addView(msg);
         Button grant = new Button(this);
         grant.setText("Autoriser l'accès");
+        grant.setAllCaps(false);
+        grant.setTextColor(Color.BLACK);
+        grant.setTextSize(16);
+        GradientDrawable gb = new GradientDrawable();
+        gb.setColor(0xFF5B9CFF);
+        gb.setCornerRadius(dp(26));
+        grant.setBackground(gb);
+        grant.setPadding(dp(32), dp(12), dp(32), dp(12));
         grant.setOnClickListener(v -> requestPermission());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.topMargin = dp(24);
@@ -339,7 +375,7 @@ public class MainActivity extends Activity {
 
     private void buildSettings(FrameLayout parent) {
         settingsView = new ScrollView(this);
-        settingsView.setBackgroundColor(0xFF121212);
+        settingsView.setBackgroundColor(0xFF0F1115);
         settingsView.setVisibility(View.GONE);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -361,9 +397,15 @@ public class MainActivity extends Activity {
             TextView t = new TextView(this);
             t.setTextColor(Color.WHITE);
             t.setTextSize(16);
-            t.setPadding(dp(20), dp(14), dp(20), dp(14));
+            t.setPadding(dp(20), dp(16), dp(20), dp(16));
+            GradientDrawable card = new GradientDrawable();
+            card.setColor(0xFF171A21);
+            card.setCornerRadius(dp(16));
+            t.setBackground(card);
             t.setOnClickListener(actions[i]);
-            list.addView(t, new LinearLayout.LayoutParams(-1, -2));
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.setMargins(dp(12), dp(4), dp(12), dp(4));
+            list.addView(t, rl);
             setRows[i] = t;
         }
         settingsView.addView(list);
@@ -460,18 +502,26 @@ public class MainActivity extends Activity {
             GradientDrawable bgd = new GradientDrawable();
             bgd.setCornerRadius(dp(18));
             if (i == filter) {
-                bgd.setColor(0xFF42A5F5);
+                bgd.setColor(0xFF5B9CFF);
                 chips[i].setTextColor(Color.BLACK);
             } else {
                 bgd.setColor(0x00000000);
-                bgd.setStroke(dp(1), 0xFF555555);
+                bgd.setStroke(dp(1), 0xFF3A3F49);
                 chips[i].setTextColor(0xFFE0E0E0);
             }
             chips[i].setBackground(bgd);
         }
         for (int i = 0; i < 4; i++) {
-            navItems[i].setTextColor(i == tab ? 0xFF42A5F5 : 0xFF9E9E9E);
-            navItems[i].setTypeface(null, i == tab ? Typeface.BOLD : Typeface.NORMAL);
+            boolean on = i == tab;
+            ImageView ic = (ImageView) navItems[i].getChildAt(0);
+            TextView lb = (TextView) navItems[i].getChildAt(1);
+            GradientDrawable pill = new GradientDrawable();
+            pill.setCornerRadius(dp(16));
+            pill.setColor(on ? 0x335B9CFF : 0x00000000);
+            ic.setBackground(pill);
+            ic.setColorFilter(on ? 0xFF5B9CFF : 0xFF8A8F98);
+            lb.setTextColor(on ? 0xFF5B9CFF : 0xFF8A8F98);
+            lb.setTypeface(null, on ? Typeface.BOLD : Typeface.NORMAL);
         }
         ActionBar ab = getActionBar();
         if (ab != null) {
@@ -797,7 +847,10 @@ public class MainActivity extends Activity {
             }
         });
 
-        menu.add(0, 2, 0, "🔀").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        MenuItem rnd = menu.add(0, 2, 0, "Lecture aléatoire");
+        rnd.setIcon(R.drawable.ic_shuffle);
+        rnd.getIcon().setTint(Color.WHITE);
+        rnd.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         menu.add(0, 3, 0, "Sélectionner");
         menu.add(0, 9, 0, "Trier…");
         menu.add(0, 10, 0, "Miniatures");
@@ -922,6 +975,7 @@ public class MainActivity extends Activity {
     }
 
     private void startSelection(MediaItem first, int pos) {
+        rv.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
         beginSelection();
         toggle(first, pos);
     }
@@ -1032,7 +1086,7 @@ public class MainActivity extends Activity {
         String[] labels = new String[albums.size() + 2];
         labels[0] = "➕  Nouvel album…";
         labels[1] = "📂  Parcourir les dossiers…";
-        for (int i = 0; i < albums.size(); i++) labels[i + 2] = "🖼️  " + albums.get(i).name + "   (" + albums.get(i).items.size() + ")";
+        for (int i = 0; i < albums.size(); i++) labels[i + 2] = "" + albums.get(i).name + "   (" + albums.get(i).items.size() + ")";
         new AlertDialog.Builder(this)
                 .setTitle("Déplacer vers…")
                 .setItems(labels, (d, w) -> {
@@ -1247,7 +1301,8 @@ public class MainActivity extends Activity {
 
     private static class AlbumVH extends RecyclerView.ViewHolder {
         ImageView image;
-        TextView name, count, more;
+        TextView name, count;
+        ImageView more;
         AlbumVH(View v) { super(v); }
     }
 
@@ -1264,9 +1319,10 @@ public class MainActivity extends Activity {
             if (type == T_HEADER) {
                 TextView t = new TextView(MainActivity.this);
                 t.setTextColor(Color.WHITE);
-                t.setTextSize(15);
+                t.setTextSize(14);
                 t.setTypeface(null, Typeface.BOLD);
-                t.setPadding(dp(10), dp(16), dp(10), dp(8));
+                t.setLetterSpacing(0.02f);
+                t.setPadding(dp(12), dp(20), dp(12), dp(8));
                 t.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
                 return new HeaderVH(t);
             }
@@ -1280,8 +1336,8 @@ public class MainActivity extends Activity {
                 AlbumVH vh = new AlbumVH(row);
                 vh.image = new ImageView(MainActivity.this);
                 GradientDrawable g = new GradientDrawable();
-                g.setColor(0xFF242424);
-                g.setCornerRadius(dp(10));
+                g.setColor(0xFF1B1F27);
+                g.setCornerRadius(dp(14));
                 vh.image.setBackground(g);
                 vh.image.setClipToOutline(true);
                 row.addView(vh.image, new LinearLayout.LayoutParams(dp(76), dp(76)));
@@ -1293,14 +1349,13 @@ public class MainActivity extends Activity {
                 vh.name.setPadding(dp(16), 0, dp(8), 0);
                 row.addView(vh.name, new LinearLayout.LayoutParams(0, -2, 1));
                 vh.count = new TextView(MainActivity.this);
-                vh.count.setTextColor(0xFFBDBDBD);
-                vh.count.setTextSize(16);
+                vh.count.setTextColor(0xFF8A8F98);
+                vh.count.setTextSize(15);
                 row.addView(vh.count);
-                vh.more = new TextView(MainActivity.this);
-                vh.more.setText("⋮");
-                vh.more.setTextColor(Color.WHITE);
-                vh.more.setTextSize(22);
-                vh.more.setGravity(Gravity.CENTER);
+                vh.more = new ImageView(MainActivity.this);
+                vh.more.setImageResource(R.drawable.ic_more);
+                vh.more.setColorFilter(0xFFB6BBC4);
+                vh.more.setPadding(dp(10), dp(12), dp(10), dp(12));
                 row.addView(vh.more, new LinearLayout.LayoutParams(dp(44), dp(48)));
                 row.setOnClickListener(v -> {
                     int p = vh.getBindingAdapterPosition();
@@ -1316,22 +1371,35 @@ public class MainActivity extends Activity {
             }
             // T_MEDIA
             SquareFrame sq = new SquareFrame(MainActivity.this);
-            sq.setPadding(dp(1), dp(1), dp(1), dp(1));
+            sq.setPadding(dp(2), dp(2), dp(2), dp(2));
             sq.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
             MediaVH vh = new MediaVH(sq);
             vh.image = new ImageView(MainActivity.this);
             vh.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            vh.image.setBackgroundColor(0xFF242424);
+            GradientDrawable tb = new GradientDrawable();
+            tb.setColor(0xFF1B1F27);
+            tb.setCornerRadius(dp(8));
+            vh.image.setBackground(tb);
+            vh.image.setClipToOutline(true);
             sq.addView(vh.image, new FrameLayout.LayoutParams(-1, -1));
             vh.dim = new View(MainActivity.this);
-            vh.dim.setBackgroundColor(0x6642A5F5);
+            GradientDrawable dg = new GradientDrawable();
+            dg.setColor(0x665B9CFF);
+            dg.setCornerRadius(dp(8));
+            dg.setStroke(dp(2), 0xFF5B9CFF);
+            vh.dim.setBackground(dg);
             sq.addView(vh.dim, new FrameLayout.LayoutParams(-1, -1));
             vh.badge = new TextView(MainActivity.this);
             vh.badge.setTextColor(Color.WHITE);
             vh.badge.setTextSize(11);
-            vh.badge.setShadowLayer(3, 0, 0, Color.BLACK);
-            vh.badge.setPadding(dp(4), dp(2), dp(5), dp(3));
-            sq.addView(vh.badge, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END));
+            GradientDrawable bg2 = new GradientDrawable();
+            bg2.setColor(0x99000000);
+            bg2.setCornerRadius(dp(10));
+            vh.badge.setBackground(bg2);
+            vh.badge.setPadding(dp(6), dp(2), dp(7), dp(2));
+            FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+            bl.setMargins(0, 0, dp(6), dp(6));
+            sq.addView(vh.badge, bl);
             vh.check = new TextView(MainActivity.this);
             vh.check.setGravity(Gravity.CENTER);
             vh.check.setTextColor(Color.WHITE);
@@ -1389,7 +1457,7 @@ public class MainActivity extends Activity {
                     vh.check.setVisibility(View.VISIBLE);
                     GradientDrawable g = new GradientDrawable();
                     g.setShape(GradientDrawable.OVAL);
-                    g.setColor(sel ? 0xFF42A5F5 : 0x55000000);
+                    g.setColor(sel ? 0xFF5B9CFF : 0x55000000);
                     g.setStroke(dp(2), Color.WHITE);
                     vh.check.setBackground(g);
                     vh.check.setText(sel ? "✓" : "");

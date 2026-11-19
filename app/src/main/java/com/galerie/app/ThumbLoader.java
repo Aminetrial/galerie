@@ -48,9 +48,13 @@ public class ThumbLoader {
         iv.setTag(key);
         Bitmap cached = cache.get(key);
         if (cached != null) {
+            iv.animate().cancel();
+            iv.setAlpha(1f);
             iv.setImageBitmap(cached);
             return;
         }
+        iv.animate().cancel();
+        iv.setAlpha(1f);
         iv.setImageDrawable(null);
         pool.execute(() -> {
             if (!key.equals(iv.getTag())) return; // la case a été réutilisée
@@ -58,7 +62,11 @@ public class ThumbLoader {
             if (bm == null) return;
             cache.put(key, bm);
             ui.post(() -> {
-                if (key.equals(iv.getTag())) iv.setImageBitmap(bm);
+                if (key.equals(iv.getTag())) {
+                    iv.setImageBitmap(bm);
+                    iv.setAlpha(0f);
+                    iv.animate().alpha(1f).setDuration(160).start();
+                }
             });
         });
     }
