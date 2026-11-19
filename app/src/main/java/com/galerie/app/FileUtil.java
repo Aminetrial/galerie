@@ -51,23 +51,29 @@ public final class FileUtil {
         list.addAll(files);
     }
 
+    /** Tri « naturel » (img2 avant img10), insensible à la casse, sans expression régulière (rapide). */
     public static int naturalCompare(String a, String b) {
         int i = 0, j = 0;
         int la = a.length(), lb = b.length();
         while (i < la && j < lb) {
             char ca = a.charAt(i), cb = b.charAt(j);
-            if (Character.isDigit(ca) && Character.isDigit(cb)) {
+            if (ca >= '0' && ca <= '9' && cb >= '0' && cb <= '9') {
                 int si = i, sj = j;
-                while (i < la && Character.isDigit(a.charAt(i))) i++;
-                while (j < lb && Character.isDigit(b.charAt(j))) j++;
-                String na = a.substring(si, i).replaceFirst("^0+(?=.)", "");
-                String nb = b.substring(sj, j).replaceFirst("^0+(?=.)", "");
-                if (na.length() != nb.length()) return na.length() - nb.length();
-                int cmp = na.compareTo(nb);
-                if (cmp != 0) return cmp;
+                while (i < la && a.charAt(i) >= '0' && a.charAt(i) <= '9') i++;
+                while (j < lb && b.charAt(j) >= '0' && b.charAt(j) <= '9') j++;
+                while (si < i - 1 && a.charAt(si) == '0') si++; // zéros de tête ignorés
+                while (sj < j - 1 && b.charAt(sj) == '0') sj++;
+                int na = i - si, nb = j - sj;
+                if (na != nb) return na - nb;
+                for (int k = 0; k < na; k++) {
+                    char x = a.charAt(si + k), y = b.charAt(sj + k);
+                    if (x != y) return x - y;
+                }
             } else {
-                int cmp = Character.compare(Character.toLowerCase(ca), Character.toLowerCase(cb));
-                if (cmp != 0) return cmp;
+                if (ca != cb) {
+                    char x = Character.toLowerCase(ca), y = Character.toLowerCase(cb);
+                    if (x != y) return x - y;
+                }
                 i++;
                 j++;
             }

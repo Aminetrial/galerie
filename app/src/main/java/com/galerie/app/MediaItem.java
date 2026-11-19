@@ -30,7 +30,17 @@ public class MediaItem {
         this.modified = date;
     }
 
-    public String name() { return new File(path).getName(); }
+    private String nameCache, nameFor;
+
+    /** Nom du fichier (mis en cache : le tri par nom l'appelle des milliers de fois). */
+    public String name() {
+        if (nameCache == null || nameFor != path) {
+            int i = path.lastIndexOf('/');
+            nameCache = i >= 0 ? path.substring(i + 1) : path;
+            nameFor = path;
+        }
+        return nameCache;
+    }
 
     public String folder() {
         int i = path.lastIndexOf('/');

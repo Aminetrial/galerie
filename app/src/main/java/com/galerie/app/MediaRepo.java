@@ -62,6 +62,7 @@ public class MediaRepo {
     public final List<MediaItem> all = new ArrayList<>();   // triés du plus récent au plus ancien
     public final List<Album> albums = new ArrayList<>();
     public boolean loaded = false;
+    public int version = 0; // augmente à chaque modification de la liste
     public boolean dirty = false; // modifié depuis la visionneuse
 
     // ------------------------------------------------------------------ chargement
@@ -125,6 +126,7 @@ public class MediaRepo {
     }
 
     public void set(Context c, List<MediaItem> list) {
+        version++;
         all.clear();
         all.addAll(list);
         loaded = true;
@@ -177,11 +179,13 @@ public class MediaRepo {
     // ------------------------------------------------------------------ mises à jour après opérations
 
     public void removed(Context c, Collection<MediaItem> items) {
+        version++;
         all.removeAll(items);
         rebuildAlbums(c);
     }
 
     public void removePath(Context c, String path) {
+        version++;
         for (Iterator<MediaItem> it = all.iterator(); it.hasNext(); ) {
             if (it.next().path.equals(path)) it.remove();
         }
@@ -190,12 +194,14 @@ public class MediaRepo {
 
     /** Un fichier a changé de chemin (renommé ou déplacé). */
     public void moved(MediaItem m, String newPath) {
+        version++;
         m.path = newPath;
         m.id = -1; // l'ancien identifiant MediaStore n'est plus valable
     }
 
     /** Un dossier entier a été renommé/déplacé (newDir == null : supprimé). */
     public List<String> folderChanged(Context c, String oldDir, String newDir) {
+        version++;
         List<String> touched = new ArrayList<>();
         String prefix = oldDir + "/";
         for (Iterator<MediaItem> it = all.iterator(); it.hasNext(); ) {

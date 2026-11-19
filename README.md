@@ -55,3 +55,6 @@ Thème sombre bleu, icônes vectorielles (barre du bas, lecteur), icône adaptat
 
 ## v17 — interface réécrite
 Nouvelle MainActivity (barre du haut maison, recherche intégrée, sélection avec suppression / déplacement / renommage, menus ⋮), thème sans ActionBar, réglages en cartes, journal de diagnostic dans Réglages.
+
+## v20 — correctif du blocage
+Cause trouvée grâce au journal : le tri par nom utilisait une expression régulière à chaque comparaison (plusieurs centaines de milliers de fois) sur le fil principal → « L'application ne répond pas ». Le tri est maintenant sans regex, fait en arrière-plan et mis en cache.

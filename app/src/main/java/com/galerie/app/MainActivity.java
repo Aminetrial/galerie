@@ -100,6 +100,9 @@ public class MainActivity extends Activity {
     private boolean sortRev = false;
     private boolean selecting = false;
     private boolean loading = false;
+    private List<MediaItem> sortedAll = new ArrayList<>(); // toute la bibliothèque, déjà triée (calculée en arrière-plan)
+    private String sortedKey = "";
+    private String sortingKey = "";
 
     private MediaRepo repo;
     private ThumbLoader thumbs;
@@ -128,9 +131,6 @@ public class MainActivity extends Activity {
     private ScrollView settingsView;
     private ProgressBar progress;
     private LinearLayout permissionView;
-    private TextView debugBanner;
-    private int touches = 0;
-    private long t0 = System.currentTimeMillis();
     private final LinearLayout[] navItems = new LinearLayout[4];
 
     // réglages (lignes)
@@ -147,25 +147,6 @@ public class MainActivity extends Activity {
         rebuildRows();
         glm.scrollToPosition(0);
     };
-
-    private final Runnable bannerTick = new Runnable() {
-        @Override
-        public void run() {
-            if (debugBanner != null && debugBanner.getVisibility() == View.VISIBLE) {
-                String tail = CrashLog.tail(26);
-                debugBanner.setText("v19 perm=" + (permissionView.getVisibility() == View.VISIBLE ? "NON" : "OK") + " items=" + repo.all.size()
-                        + " lignes=" + rows.size() + " chargement=" + loading + " touches=" + touches
-                        + " blocageMax=" + CrashLog.maxStall + "ms vie=" + ((System.currentTimeMillis() - t0) / 1000) + "s\n" + tail);
-            }
-            ui.postDelayed(this, 500);
-        }
-    };
-
-    @Override
-    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
-        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) touches++;
-        return super.dispatchTouchEvent(ev);
-    }
 
     // ================================================================== cycle de vie
 
@@ -399,18 +380,6 @@ public class MainActivity extends Activity {
                 new LinearLayout.LayoutParams(dp(48), dp(48)));
         topFrame.addView(selectBar, new FrameLayout.LayoutParams(-1, -1));
         showBar(BAR_NORMAL);
-
-        // --- bandeau de diagnostic (temporaire) : prouve que l'interface est vivante
-        debugBanner = new TextView(this);
-        debugBanner.setTextColor(0xFFFFFFFF);
-        debugBanner.setBackgroundColor(0xFF7A1F1F);
-        debugBanner.setTextSize(8);
-        debugBanner.setMaxLines(30);
-        debugBanner.setTypeface(Typeface.MONOSPACE);
-        debugBanner.setPadding(dp(6), dp(2), dp(6), dp(2));
-        debugBanner.setOnClickListener(v -> debugBanner.setVisibility(View.GONE));
-        root.addView(debugBanner, new LinearLayout.LayoutParams(-1, -2));
-        ui.post(bannerTick);
 
         // --- filtres Tout / Photos / Vidéos (dans un album de l'onglet Albums)
         chipsRow = new LinearLayout(this);
@@ -676,7 +645,39 @@ public class MainActivity extends Activity {
         return sortRev ? Collections.reverseOrder(c) : c;
     }
 
+    private String sortKey() {
+        return sortMode + "/" + sortRev + "/" + repo.version;
+    }
+
+    /** Trie toute la bibliothèque hors du fil principal (une seule fois par réglage de tri). */
+    private void sortAsync() {
+        final String key = sortKey();
+        if (key.equals(sortingKey)) return;
+        sortingKey = key;
+        progress.setVisibility(View.VISIBLE);
+        final List<MediaItem> copy = new ArrayList<>(repo.all);
+        final Comparator<MediaItem> cmp = mediaCmp();
+        bg.execute(() -> {
+            try {
+                Collections.sort(copy, cmp);
+            } catch (Throwable ignored) { }
+            post(() -> {
+                sortingKey = "";
+                if (!key.equals(sortKey())) { sortAsync(); return; }
+                sortedAll = copy;
+                sortedKey = key;
+                progress.setVisibility(loading ? View.VISIBLE : View.GONE);
+                rebuildRows();
+            });
+        });
+    }
+
     private void rebuildRows() {
+        boolean needsSorted = repo.loaded && tab != TAB_SETTINGS && !(isFolderView() && query.trim().isEmpty());
+        if (needsSorted && !sortKey().equals(sortedKey)) {
+            sortAsync();
+            return;
+        }
         rows.clear();
         visibleMedia.clear();
         if (openAlbum != null && repo.album(openAlbum) == null) openAlbum = null;
@@ -690,10 +691,9 @@ public class MainActivity extends Activity {
                     addHeader("Dossiers (" + found.size() + ")");
                     rows.addAll(found);
                 }
-                for (MediaItem m : repo.all) {
+                for (MediaItem m : sortedAll) {
                     if (passFilter(m) && m.name().toLowerCase(Locale.ROOT).contains(q)) visibleMedia.add(m);
                 }
-                Collections.sort(visibleMedia, mediaCmp());
                 if (!visibleMedia.isEmpty()) {
                     addHeader("Photos et vidéos (" + visibleMedia.size() + ")");
                     addMediaRows(visibleMedia);
@@ -704,9 +704,10 @@ public class MainActivity extends Activity {
                 empty = tab == TAB_VIDEOS ? "Aucun dossier contenant des vidéos"
                         : tab == TAB_PHOTOS ? "Aucun dossier contenant des photos" : "Aucun album";
             } else {
-                List<MediaItem> src = openAlbum != null ? repo.album(openAlbum).items : repo.all;
-                for (MediaItem m : src) if (passFilter(m)) visibleMedia.add(m);
-                Collections.sort(visibleMedia, mediaCmp());
+                for (MediaItem m : sortedAll) {
+                    if (openAlbum != null && !m.folder().equals(openAlbum)) continue;
+                    if (passFilter(m)) visibleMedia.add(m);
+                }
                 if (sortMode == SORT_DATE || sortMode == SORT_MODIFIED) addDateGrouped(visibleMedia);
                 else addMediaRows(visibleMedia);
                 empty = tab == TAB_VIDEOS ? "Aucune vidéo" : tab == TAB_PHOTOS ? "Aucune photo" : "Aucune photo ni vidéo";
