@@ -429,11 +429,13 @@ public class ViewerActivity extends Activity {
     private void showMenu(View anchor) {
         h.removeCallbacks(autoHide);
         PopupMenu pm = new PopupMenu(this, anchor);
+        pm.getMenu().add(0, 4, 0, "Partager");
         pm.getMenu().add(0, 1, 0, "Déplacer vers…");
         pm.getMenu().add(0, 2, 0, "Supprimer");
         pm.getMenu().add(0, 3, 0, "Infos et dossier");
         pm.setOnMenuItemClickListener(it -> {
-            if (it.getItemId() == 1) moveCurrent();
+            if (it.getItemId() == 4) Share.send(this, Collections.singletonList(paths.get(index)));
+            else if (it.getItemId() == 1) moveCurrent();
             else if (it.getItemId() == 2) deleteCurrent();
             else showInfo();
             return true;

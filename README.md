@@ -17,7 +17,7 @@ Barre du bas : **📁 Albums · 🎬 Vidéos · 🖼️ Photos · ⚙️ Réglag
 - **Mode aléatoire** : bouton 🔀 dans le lecteur, ou ⚙️ Réglages (même réglage).
 - **Tri** (menu ⋮ → Trier…, ou Réglages) : date, date de modification, taille (stockage), nom (alphabétique) + « ⇅ Inverser l'ordre ». S'applique aux photos, vidéos et albums.
 
-**Lecteur photo / vidéo** : menu ⋮ en haut à droite (Déplacer vers…, Supprimer, Infos et dossier) ; le dossier du fichier est affiché sous son nom. Une seule barre de commandes : ↻ relancer · ⏮ précédent · ⏯ · ⏭ suivant · 🔀 aléatoire (activé ou non)
+**Lecteur photo / vidéo** : menu ⋮ en haut à droite (Partager, Déplacer vers…, Supprimer, Infos et dossier) ; le dossier du fichier est affiché sous son nom. Une seule barre de commandes : ↻ relancer · ⏮ précédent · ⏯ · ⏭ suivant · 🔀 aléatoire (activé ou non)
 - Aléatoire activé : ⏭ / glisser gauche / fin de vidéo / fin du délai d'une image = élément au hasard (sans répétition) ; ⏮ / glisser droite = revenir à l'élément vu avant
 - Aléatoire désactivé : suivant / précédent dans l'ordre de la liste affichée (tout, un dossier, une recherche)
 - Fin de vidéo : passe au suivant (ou au hasard). Images : Réglages → « Passage automatique des images » (désactivé, 5 s, 10 s)

@@ -879,10 +879,15 @@ public class MainActivity extends Activity {
 
     private void showSelectionMenu(View anchor) {
         PopupMenu pm = new PopupMenu(this, anchor);
+        pm.getMenu().add(0, 3, 0, "Partager");
         if (selected.size() == 1) pm.getMenu().add(0, 1, 0, "Renommer");
         pm.getMenu().add(0, 2, 0, "Tout sélectionner");
         pm.setOnMenuItemClickListener(it -> {
-            if (it.getItemId() == 1) renameSelected();
+            if (it.getItemId() == 3) {
+                List<String> ps = new ArrayList<>();
+                for (MediaItem m : selected) ps.add(m.path);
+                Share.send(this, ps);
+            } else if (it.getItemId() == 1) renameSelected();
             else {
                 selected.addAll(visibleMedia);
                 updateSelCount();
