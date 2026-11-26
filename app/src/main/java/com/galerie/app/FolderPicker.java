@@ -44,7 +44,7 @@ public class FolderPicker {
     private static class Entry {
         File dir;
         String sub;
-        boolean up;
+        boolean up, browse;
     }
 
     private final Activity act;
@@ -56,6 +56,7 @@ public class FolderPicker {
     private final Map<String, Integer> counts = new HashMap<>();
     private volatile List<File> allDirs = new ArrayList<>();
     private String query = "";
+    private boolean home = true; // true = liste de tous les albums ; false = navigation dans les dossiers
 
     private Dialog dialog;
     private EditText searchEdit;
@@ -177,8 +178,9 @@ public class FolderPicker {
         dialog.setOnKeyListener((d, code, ev) -> {
             if (code == KeyEvent.KEYCODE_BACK && ev.getAction() == KeyEvent.ACTION_UP) {
                 if (!query.isEmpty()) { searchEdit.setText(""); return true; }
-                if (!current.equals(root) && current.getParentFile() != null) {
-                    current = current.getParentFile();
+                if (!home) {
+                    if (!current.equals(root) && current.getParentFile() != null) current = current.getParentFile();
+                    else home = true;
                     refresh();
                     return true;
                 }
@@ -233,13 +235,36 @@ public class FolderPicker {
 
     private void refresh() {
         entries.clear();
-        if (query.isEmpty()) {
+        if (query.isEmpty() && home) {
+            Entry b = new Entry();
+            b.browse = true;
+            b.sub = "Explorer tous les dossiers du téléphone";
+            entries.add(b);
+            List<MediaRepo.Album> al = new ArrayList<>(MediaRepo.get().albums);
+            Collections.sort(al, (x, y) -> FileUtil.naturalCompare(x.name, y.name));
+            for (MediaRepo.Album a : al) {
+                Entry e = new Entry();
+                e.dir = new File(a.path);
+                String c = subtitle(e.dir);
+                File par = e.dir.getParentFile();
+                e.sub = (c.isEmpty() ? "" : c + " · ") + (par != null ? shortPath(par) : "");
+                entries.add(e);
+            }
+            pathView.setText("Vos albums (" + al.size() + ")");
+            hereBtn.setVisibility(View.GONE);
+            emptyView.setVisibility(View.GONE);
+        } else if (query.isEmpty()) {
             File parent = current.getParentFile();
             if (!current.equals(root) && parent != null) {
                 Entry up = new Entry();
                 up.dir = parent;
                 up.up = true;
                 up.sub = "Dossier parent";
+                entries.add(up);
+            } else {
+                Entry up = new Entry();
+                up.up = true; // dir == null : retour à la liste des albums
+                up.sub = "Retour à la liste des albums";
                 entries.add(up);
             }
             File[] l = current.listFiles();
@@ -289,6 +314,7 @@ public class FolderPicker {
     }
 
     private void open(File dir) {
+        home = false;
         current = dir;
         if (!query.isEmpty()) searchEdit.setText(""); // le watcher relance refresh()
         else refresh();
@@ -308,7 +334,11 @@ public class FolderPicker {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(16), dp(10), dp(12), dp(10));
-            row.setOnClickListener(v -> open(e.dir));
+            row.setOnClickListener(v -> {
+                if (e.browse) { home = false; current = root; refresh(); }
+                else if (e.up && e.dir == null) { home = true; refresh(); }
+                else open(e.dir);
+            });
 
             ImageView ic = new ImageView(act);
             ic.setImageResource(e.up ? R.drawable.ic_back : R.drawable.ic_folder);
@@ -321,7 +351,7 @@ public class FolderPicker {
             col.setOrientation(LinearLayout.VERTICAL);
             col.setPadding(dp(14), 0, dp(8), 0);
             TextView name = new TextView(act);
-            name.setText(e.up ? ".." : e.dir.getName());
+            name.setText(e.browse ? "Parcourir tout le stockage" : e.up ? ".." : e.dir.getName());
             name.setTextColor(Ui.TEXT);
             name.setTextSize(16);
             name.setSingleLine(true);
@@ -338,7 +368,7 @@ public class FolderPicker {
             }
             row.addView(col, new LinearLayout.LayoutParams(0, -2, 1));
 
-            if (!e.up) {
+            if (!e.up && !e.browse) {
                 TextView choose = new TextView(act);
                 choose.setText("Choisir");
                 choose.setTextColor(Ui.ACCENT);
@@ -364,6 +394,10 @@ public class FolderPicker {
     // ------------------------------------------------------------------ nouveau dossier
 
     private void newFolder() {
+        if (home && query.isEmpty()) {
+            current = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+            if (!current.isDirectory()) current.mkdirs();
+        }
         final EditText et = new EditText(act);
         et.setSingleLine(true);
         et.setHint("Nom du dossier");
