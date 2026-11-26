@@ -1578,11 +1578,13 @@ public class MainActivity extends Activity {
                 vh.count.setText(r.text);
                 if (r.cover != null) {
                     vh.image.setScaleType(thumbsOriginal ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+                    vh.image.clearColorFilter();
                     thumbs.load(r.cover, vh.image);
                 } else {
                     vh.image.setTag(null);
                     vh.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     vh.image.setImageResource(R.drawable.ic_folder);
+                    vh.image.setColorFilter(Ui.MUTED);
                 }
             } else if (holder instanceof MediaVH) {
                 MediaVH vh = (MediaVH) holder;

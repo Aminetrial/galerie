@@ -55,7 +55,6 @@ public class FolderPicker {
     private File current;
     private final List<Entry> entries = new ArrayList<>();
     private final Map<String, Integer> counts = new HashMap<>();
-    private volatile List<File> allDirs = new ArrayList<>();
     private String query = "";
     private boolean home = true; // true = liste de tous les albums ; false = navigation dans les dossiers
 
@@ -215,32 +214,9 @@ public class FolderPicker {
             dialog.getWindow().setNavigationBarColor(Ui.BG);
         }
         refresh();
-        scanAllDirs();
     }
 
     // ------------------------------------------------------------------ données
-
-    /** Liste tous les dossiers du stockage en arrière-plan (pour la recherche). */
-    private void scanAllDirs() {
-        new Thread(() -> {
-            List<File> out = new ArrayList<>();
-            walk(root, 0, out);
-            allDirs = out;
-            act.runOnUiThread(() -> { if (dialog.isShowing() && !query.isEmpty()) refresh(); });
-        }, "galerie-dirs").start();
-    }
-
-    private void walk(File dir, int depth, List<File> out) {
-        if (depth > 7 || out.size() > 30000) return;
-        File[] l = dir.listFiles();
-        if (l == null) return;
-        for (File f : l) {
-            if (!f.isDirectory() || f.getName().startsWith(".")) continue;
-            if (depth == 0 && f.getName().equals("Android")) continue;
-            out.add(f);
-            walk(f, depth + 1, out);
-        }
-    }
 
     private String shortPath(File f) {
         String p = f.getAbsolutePath();
@@ -302,20 +278,16 @@ public class FolderPicker {
         } else {
             String q = query.toLowerCase(Locale.ROOT);
             List<File> found = new ArrayList<>();
-            for (File f : allDirs) {
-                if (f.getName().toLowerCase(Locale.ROOT).contains(q)) {
-                    found.add(f);
-                    if (found.size() >= 300) break;
-                }
+            for (MediaRepo.Album al : MediaRepo.get().albums) {
+                if (al.name.toLowerCase(Locale.ROOT).contains(q)) found.add(new File(al.path));
             }
-            Collections.sort(found, (a, b) -> FileUtil.naturalCompare(a.getName(), b.getName()));
             for (File f : found) {
                 Entry e = new Entry();
                 e.dir = f;
                 e.sub = subtitle(f);
                 entries.add(e);
             }
-            pathView.setText(found.size() + (found.size() > 1 ? " dossiers trouvés" : " dossier trouvé"));
+            pathView.setText(found.size() + (found.size() > 1 ? " albums trouvés" : " album trouvé"));
             hereBtn.setVisibility(View.GONE);
             emptyView.setText("Aucun dossier trouvé");
             emptyView.setVisibility(entries.isEmpty() ? View.VISIBLE : View.GONE);
@@ -383,9 +355,9 @@ public class FolderPicker {
                 thumbs.load(al.items.get(0), ic);
             } else {
                 ic.setImageResource(e.up ? R.drawable.ic_back : R.drawable.ic_folder);
+                ic.setColorFilter(Ui.MUTED);
                 ic.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                 ic.setPadding(dp(browsing ? 8 : 22), dp(browsing ? 8 : 22), dp(browsing ? 8 : 22), dp(browsing ? 8 : 22));
-                if (e.up) ic.setColorFilter(Ui.MUTED);
             }
             row.addView(ic, new LinearLayout.LayoutParams(dp(box), dp(box)));
 
@@ -466,9 +438,6 @@ public class FolderPicker {
                     File nd = new File(current, n);
                     if (nd.isDirectory() || nd.mkdir()) {
                         MediaRepo.addEmptyAlbum(act, nd.getAbsolutePath());
-                        List<File> upd = new ArrayList<>(allDirs);
-                        upd.add(nd);
-                        allDirs = upd;
                         open(nd);
                     } else Toast.makeText(act, "Impossible de créer le dossier", Toast.LENGTH_SHORT).show();
                 })
