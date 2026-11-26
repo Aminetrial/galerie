@@ -33,11 +33,11 @@ public final class Guide {
                     "↻|relance la vidéo depuis le début",
                     "⏮ / ⏭|précédent / suivant (en mode aléatoire : ⏮ revient au média vu juste avant)",
                     "⏯|lecture / pause (y compris pour le passage automatique des images)",
-                    "Aléatoire|bleu = activé : suivant et fin de vidéo ouvrent un média au hasard"},
+                    "Aléatoire|bleu = activé : suivant et fin de vidéo ouvrent un média au hasard",
+                    "🗑 (à droite)|supprime en 1 clic ; « ANNULER » reste affiché 6 secondes pour récupérer le fichier"},
             {"Menu ⋮ du lecteur",
                     "Partager|envoie le fichier vers une autre application",
                     "Déplacer vers…|choisit ou crée un dossier de destination",
-                    "Supprimer|supprime définitivement, après confirmation",
                     "Propriétés|nom, dossier, taille et date du fichier"},
     };
 

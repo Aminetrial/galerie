@@ -68,7 +68,11 @@ public class ViewerActivity extends Activity {
     private TextView title, folderView, counter, timeCur, timeTotal;
     private SeekBar seek;
     private ImageButton restartBtn, playBtn, randomBtn;
-    private View divider1;
+    private LinearLayout snack;
+    private TextView snackText;
+    private String pendingPath;
+    private int pendingIndex = -1;
+    private final Runnable commitRunnable = this::commitPending;
 
     private boolean controlsVisible = true;
     private boolean userSeeking = false;
@@ -117,7 +121,7 @@ public class ViewerActivity extends Activity {
         SharedPreferences hintPrefs = getSharedPreferences("galerie", MODE_PRIVATE);
         if (!hintPrefs.getBoolean("hint_seen", false)) {
             hintPrefs.edit().putBoolean("hint_seen", true).apply();
-            Toast.makeText(this, "Astuce : glissez pour changer de média, pincez pour zoomer, ⋮ pour partager, déplacer ou supprimer.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Astuce : glissez pour changer de média, pincez pour zoomer, 🗑 pour supprimer (annulable), ⋮ pour partager ou déplacer.", Toast.LENGTH_LONG).show();
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -152,6 +156,7 @@ public class ViewerActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        commitPending();
         h.removeCallbacks(slideNext);
         if (isVideo) {
             resumePos = videoView.getCurrentPosition();
@@ -176,6 +181,7 @@ public class ViewerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        commitPending();
         super.onDestroy();
         h.removeCallbacksAndMessages(null);
         loader.shutdownNow();
@@ -241,16 +247,16 @@ public class ViewerActivity extends Activity {
         videoView = new VideoView(this);
         root.addView(videoView, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
 
-        // --- barre du haut : ← nom position
+        // --- barre du haut : ← nom + dossier · position · ⋮
         topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackground(gradient(true));
-        topBar.setPadding(dp(4), dp(4), dp(12), dp(16));
+        topBar.setPadding(dp(4), dp(4), dp(8), dp(12));
         ImageButton back = ibtn(R.drawable.ic_back, v -> finish());
         back.setContentDescription("Retour");
         back.setPadding(dp(12), dp(12), dp(12), dp(12));
-        topBar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        topBar.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
         LinearLayout titleCol = new LinearLayout(this);
         titleCol.setOrientation(LinearLayout.VERTICAL);
         title = new TextView(this);
@@ -260,37 +266,41 @@ public class ViewerActivity extends Activity {
         title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         titleCol.addView(title);
         folderView = new TextView(this);
-        folderView.setTextColor(0xFF9FB8E8);
-        folderView.setTextSize(12);
+        folderView.setTextColor(0xB8FFFFFF);
+        folderView.setTextSize(11.5f);
         folderView.setSingleLine(true);
         folderView.setEllipsize(android.text.TextUtils.TruncateAt.START);
         titleCol.addView(folderView);
-        // nom et dossier : visibles seulement dans le menu ⋮ → Propriétés
-        topBar.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        LinearLayout.LayoutParams tcl = new LinearLayout.LayoutParams(0, -2, 1);
+        tcl.leftMargin = dp(4);
+        tcl.rightMargin = dp(8);
+        topBar.addView(titleCol, tcl);
         counter = new TextView(this);
-        counter.setTextColor(0xFFBDBDBD);
-        counter.setTextSize(13);
-        counter.setPadding(dp(8), 0, 0, 0);
+        counter.setTextColor(Color.WHITE);
+        counter.setTextSize(12);
+        counter.setSingleLine(true);
+        counter.setPadding(dp(10), dp(5), dp(10), dp(5));
+        GradientDrawable cg = new GradientDrawable();
+        cg.setColor(0x29FFFFFF);
+        cg.setCornerRadius(dp(14));
+        counter.setBackground(cg);
         topBar.addView(counter);
         ImageButton more = ibtn(R.drawable.ic_more, v -> showMenu(v));
-        more.setPadding(dp(12), dp(12), dp(12), dp(12));
-        more.setContentDescription("Plus d'options");
-        topBar.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        more.setPadding(dp(11), dp(11), dp(11), dp(11));
+        more.setContentDescription("Plus d'options : partager, déplacer, propriétés");
+        topBar.addView(more, new LinearLayout.LayoutParams(dp(44), dp(44)));
         root.addView(topBar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
-        // --- bas : progression (vidéo) + barre de commandes
+        // --- bas : progression (vidéo) + une seule ligne : ↻ ⏮ ⏯ ⏭ 🔀 | 🗑
         bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
         bottom.setBackground(gradient(false));
-        bottom.setPadding(dp(10), dp(24), dp(10), dp(12));
+        bottom.setPadding(dp(12), dp(18), dp(12), dp(14));
 
         seekBlock = new LinearLayout(this);
-        seekBlock.setOrientation(LinearLayout.VERTICAL);
-        seek = new SeekBar(this);
-        seekBlock.addView(seek, new LinearLayout.LayoutParams(-1, -2));
-        LinearLayout times = new LinearLayout(this);
-        times.setOrientation(LinearLayout.HORIZONTAL);
-        times.setPadding(dp(14), 0, dp(14), dp(6));
+        seekBlock.setOrientation(LinearLayout.HORIZONTAL);
+        seekBlock.setGravity(Gravity.CENTER_VERTICAL);
+        seekBlock.setPadding(dp(4), 0, dp(4), dp(6));
         timeCur = new TextView(this);
         timeCur.setTextColor(0xFFE0E0E0);
         timeCur.setTextSize(12);
@@ -300,41 +310,97 @@ public class ViewerActivity extends Activity {
         timeTotal.setTextSize(12);
         timeTotal.setGravity(Gravity.END);
         timeTotal.setText("0:00");
-        times.addView(timeCur, new LinearLayout.LayoutParams(0, -2, 1));
-        times.addView(timeTotal, new LinearLayout.LayoutParams(0, -2, 1));
-        seekBlock.addView(times);
+        seek = new SeekBar(this);
+        seekBlock.addView(timeCur);
+        seekBlock.addView(seek, new LinearLayout.LayoutParams(0, -2, 1));
+        seekBlock.addView(timeTotal);
         bottom.addView(seekBlock);
 
         LinearLayout pill = new LinearLayout(this);
         pill.setOrientation(LinearLayout.HORIZONTAL);
         pill.setGravity(Gravity.CENTER_VERTICAL);
-        pill.setPadding(dp(6), dp(4), dp(6), dp(4));
+        pill.setPadding(dp(4), dp(4), dp(4), dp(4));
         GradientDrawable pg = new GradientDrawable();
-        pg.setColor(0xE6171A21);
-        pg.setCornerRadius(dp(30));
+        pg.setColor(0xDB161920);
+        pg.setCornerRadius(dp(28));
         pill.setBackground(pg);
 
         restartBtn = ibtn(R.drawable.ic_restart, v -> restart());
         restartBtn.setContentDescription("Relancer");
+        restartBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
         ImageButton prevBtn = ibtn(R.drawable.ic_prev, v -> prev());
         prevBtn.setContentDescription("Précédent");
+        prevBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
         playBtn = ibtn(R.drawable.ic_pause, v -> togglePlay());
         playBtn.setContentDescription("Lecture ou pause");
+        playBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
+        GradientDrawable playBg = new GradientDrawable();
+        playBg.setShape(GradientDrawable.OVAL);
+        playBg.setColor(Color.WHITE);
+        playBtn.setBackground(playBg);
+        playBtn.setColorFilter(0xFF0F1115);
         ImageButton nextBtn = ibtn(R.drawable.ic_next, v -> next());
         nextBtn.setContentDescription("Suivant");
+        nextBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
         randomBtn = ibtn(R.drawable.ic_shuffle, v -> toggleRandom());
         randomBtn.setContentDescription("Mode aléatoire");
+        randomBtn.setPadding(dp(9), dp(9), dp(9), dp(9));
+        ImageButton delBtn = ibtn(R.drawable.ic_delete, v -> deleteOneClick());
+        delBtn.setContentDescription("Supprimer");
+        delBtn.setPadding(dp(11), dp(11), dp(11), dp(11));
+        delBtn.setColorFilter(0xFFFF7B7B);
+        GradientDrawable delBg = new GradientDrawable();
+        delBg.setShape(GradientDrawable.OVAL);
+        delBg.setColor(0x2EFF5C5C);
+        delBtn.setBackground(delBg);
 
-        pill.addView(restartBtn, new LinearLayout.LayoutParams(0, dp(52), 1));
-        divider1 = divider();
-        pill.addView(divider1, new LinearLayout.LayoutParams(dp(1), dp(32)));
-        pill.addView(prevBtn, new LinearLayout.LayoutParams(0, dp(52), 1.2f));
-        pill.addView(playBtn, new LinearLayout.LayoutParams(0, dp(52), 1.6f));
-        pill.addView(nextBtn, new LinearLayout.LayoutParams(0, dp(52), 1.2f));
-        pill.addView(divider(), new LinearLayout.LayoutParams(dp(1), dp(32)));
-        pill.addView(randomBtn, new LinearLayout.LayoutParams(0, dp(52), 1));
+        pill.addView(restartBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        pill.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        pill.addView(prevBtn, new LinearLayout.LayoutParams(dp(42), dp(44)));
+        pill.addView(playBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        pill.addView(nextBtn, new LinearLayout.LayoutParams(dp(42), dp(44)));
+        pill.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(dp(38), dp(38));
+        rl.rightMargin = dp(2);
+        pill.addView(randomBtn, rl);
+        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(dp(1), dp(20));
+        dl.leftMargin = dp(4);
+        dl.rightMargin = dp(6);
+        pill.addView(divider(), dl);
+        pill.addView(delBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
         bottom.addView(pill, new LinearLayout.LayoutParams(-1, -2));
         root.addView(bottom, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+
+        // --- bandeau « supprimé · ANNULER » (indépendant des commandes)
+        snack = new LinearLayout(this);
+        snack.setOrientation(LinearLayout.HORIZONTAL);
+        snack.setGravity(Gravity.CENTER_VERTICAL);
+        snack.setPadding(dp(16), 0, dp(6), 0);
+        GradientDrawable sg = new GradientDrawable();
+        sg.setColor(0xFF2A2F3A);
+        sg.setCornerRadius(dp(12));
+        snack.setBackground(sg);
+        snack.setElevation(dp(8));
+        snackText = new TextView(this);
+        snackText.setTextColor(Color.WHITE);
+        snackText.setTextSize(14);
+        snack.addView(snackText, new LinearLayout.LayoutParams(0, -2, 1));
+        Button undoBtn = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        undoBtn.setText("ANNULER");
+        undoBtn.setTextColor(0xFF7DB0FF);
+        undoBtn.setTextSize(14);
+        undoBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        undoBtn.setMinWidth(0);
+        undoBtn.setMinimumWidth(0);
+        undoBtn.setContentDescription("Annuler la suppression");
+        undoBtn.setOnClickListener(v -> undoDelete());
+        snack.addView(undoBtn, new LinearLayout.LayoutParams(-2, dp(44)));
+        snack.setVisibility(View.GONE);
+        FrameLayout.LayoutParams snl = new FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM);
+        snl.leftMargin = dp(12);
+        snl.rightMargin = dp(12);
+        snl.bottomMargin = dp(84);
+        root.addView(snack, snl);
 
         setContentView(root);
         styleRandomBtn();
@@ -383,10 +449,10 @@ public class ViewerActivity extends Activity {
 
     private void styleRandomBtn() {
         GradientDrawable g = new GradientDrawable();
-        g.setCornerRadius(dp(26));
+        g.setShape(GradientDrawable.OVAL);
         g.setColor(randomMode ? 0xFF5B9CFF : 0x00000000);
         randomBtn.setBackground(g);
-        randomBtn.setColorFilter(randomMode ? Color.BLACK : 0x99FFFFFF);
+        randomBtn.setColorFilter(randomMode ? Color.WHITE : 0x99FFFFFF);
     }
 
     private void toggleRandom() {
@@ -401,7 +467,6 @@ public class ViewerActivity extends Activity {
         boolean slide = !isVideo && photoDelay > 0;
         int v = isVideo || slide ? View.VISIBLE : View.GONE;
         restartBtn.setVisibility(v);
-        divider1.setVisibility(v);
         playBtn.setVisibility(v);
         seekBlock.setVisibility(isVideo ? View.VISIBLE : View.GONE);
     }
@@ -433,9 +498,10 @@ public class ViewerActivity extends Activity {
     private void updateFolderLabel(File f) {
         File parent = f.getParentFile();
         String p = parent != null ? parent.getAbsolutePath() : "";
-        String root = android.os.Environment.getExternalStorageDirectory().getAbsolutePath();
-        if (p.startsWith(root)) p = "Stockage" + p.substring(root.length());
-        folderView.setText("📁 " + p);
+        String base = android.os.Environment.getExternalStorageDirectory().getAbsolutePath();
+        if (p.startsWith(base)) p = p.substring(base.length());
+        while (p.startsWith("/")) p = p.substring(1);
+        folderView.setText(p.isEmpty() ? "Stockage" : p.replace("/", " / "));
     }
 
     private MediaItem currentItem() {
@@ -449,14 +515,12 @@ public class ViewerActivity extends Activity {
         PopupMenu pm = new PopupMenu(this, anchor);
         pm.getMenu().add(0, 4, 0, "Partager");
         pm.getMenu().add(0, 1, 0, "Déplacer vers…");
-        pm.getMenu().add(0, 2, 0, "Supprimer");
         pm.getMenu().add(0, 3, 0, "Propriétés");
         pm.getMenu().add(0, 5, 0, "Boutons et gestes");
         pm.setOnMenuItemClickListener(it -> {
             if (it.getItemId() == 5) Guide.show(this);
             else if (it.getItemId() == 4) Share.send(this, Collections.singletonList(paths.get(index)));
             else if (it.getItemId() == 1) moveCurrent();
-            else if (it.getItemId() == 2) deleteCurrent();
             else showInfo();
             return true;
         });
@@ -479,35 +543,67 @@ public class ViewerActivity extends Activity {
                 .show();
     }
 
-    private void deleteCurrent() {
+    /** 🗑 : retire tout de suite le média de la liste ; le fichier n'est effacé qu'après 6 s (ANNULER possible). */
+    private void deleteOneClick() {
+        commitPending(); // une éventuelle suppression précédente devient définitive
+        if (paths.isEmpty()) return;
         final String path = paths.get(index);
-        new AlertDialog.Builder(this)
-                .setTitle("Supprimer ce fichier ?")
-                .setMessage(new File(path).getName() + "\n\nCette action est définitive.")
-                .setPositiveButton("Supprimer", (d, w) -> {
-                    if (isVideo) videoView.stopPlayback();
-                    File f = new File(path);
-                    if (!f.delete() && f.exists()) {
-                        Toast.makeText(this, "Impossible de supprimer", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    MediaRepo repo = MediaRepo.get();
-                    MediaItem m = null;
-                    for (MediaItem x : repo.all) if (x.path.equals(path)) { m = x; break; }
-                    if (m != null) {
-                        MediaRepo.deleteFromMediaStore(this, m);
-                        repo.removed(this, Collections.singletonList(m));
-                    }
-                    MediaRepo.scan(this, Collections.singletonList(path));
-                    repo.dirty = true;
-                    paths.remove(index);
-                    shuffleBag.clear();
-                    Toast.makeText(this, "Fichier supprimé", Toast.LENGTH_SHORT).show();
-                    if (paths.isEmpty()) { finish(); return; }
-                    show(Math.min(index, paths.size() - 1));
-                })
-                .setNegativeButton("Annuler", null)
-                .show();
+        final boolean video = isVideo;
+        if (video) videoView.stopPlayback();
+        pendingPath = path;
+        pendingIndex = index;
+        paths.remove(index);
+        shuffleBag.clear();
+        if (paths.isEmpty()) {
+            commitPending();
+            Toast.makeText(this, "Fichier supprimé", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+        show(Math.min(index, paths.size() - 1));
+        snackText.setText(video ? "Vidéo supprimée" : "Photo supprimée");
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) snack.getLayoutParams();
+        lp.bottomMargin = (isVideo ? dp(124) : dp(84));
+        snack.setLayoutParams(lp);
+        snack.setVisibility(View.VISIBLE);
+        h.removeCallbacks(commitRunnable);
+        h.postDelayed(commitRunnable, 6000);
+    }
+
+    private void undoDelete() {
+        if (pendingPath == null) return;
+        h.removeCallbacks(commitRunnable);
+        int at = Math.max(0, Math.min(pendingIndex, paths.size()));
+        paths.add(at, pendingPath);
+        pendingPath = null;
+        pendingIndex = -1;
+        snack.setVisibility(View.GONE);
+        shuffleBag.clear();
+        show(at);
+    }
+
+    /** Efface réellement le fichier en attente (délai écoulé, nouvelle suppression, fermeture du lecteur). */
+    private void commitPending() {
+        h.removeCallbacks(commitRunnable);
+        if (snack != null) snack.setVisibility(View.GONE);
+        final String path = pendingPath;
+        pendingPath = null;
+        pendingIndex = -1;
+        if (path == null) return;
+        File f = new File(path);
+        if (!f.delete() && f.exists()) {
+            Toast.makeText(this, "Impossible de supprimer " + f.getName(), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        MediaRepo repo = MediaRepo.get();
+        MediaItem m = null;
+        for (MediaItem x : repo.all) if (x.path.equals(path)) { m = x; break; }
+        if (m != null) {
+            MediaRepo.deleteFromMediaStore(this, m);
+            repo.removed(this, Collections.singletonList(m));
+        }
+        MediaRepo.scan(this, Collections.singletonList(path));
+        repo.dirty = true;
     }
 
     private void moveCurrent() {
@@ -558,7 +654,7 @@ public class ViewerActivity extends Activity {
     }
 
     private boolean onControls(MotionEvent e) {
-        return inside(topBar, e) || inside(bottom, e);
+        return inside(topBar, e) || inside(bottom, e) || inside(snack, e);
     }
 
     private void setupGestures() {

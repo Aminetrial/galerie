@@ -71,3 +71,9 @@ Plein écran : liste de tous vos albums dès l'ouverture, navigation dossier par
 
 ## v27 — sélecteur de dossier « comme une vraie galerie »
 Titre centré, bouton « Nouveau dossier » et loupe en haut ; chaque album avec sa miniature (format d'origine), son nom, son nombre d'éléments et son chemin ; toucher un album le choisit directement. La loupe ouvre la recherche instantanée dans les albums (dossiers contenant des médias ; les autres via « Parcourir tout le stockage »).
+
+## v29 — nouveau lecteur (maquette validée)
+- Média au maximum de la taille de l'écran : barres fines, dégradés réduits.
+- Une seule ligne de commandes en bas : ↻ ⏮ ⏯ ⏭ 🔀 puis 🗑 **Supprimer** à droite ; barre de progression au-dessus pour les vidéos.
+- Barre du haut : ←, nom du fichier et dossier, position, ⋮ (Partager, Déplacer vers…, Propriétés, Boutons et gestes).
+- Suppression en 1 clic sans confirmation : le média suivant s'affiche aussitôt avec un bandeau « supprimé · ANNULER ». Le fichier n'est réellement effacé qu'au bout de 6 s, à la prochaine suppression ou à la fermeture du lecteur.
