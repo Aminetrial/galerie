@@ -58,3 +58,10 @@ Nouvelle MainActivity (barre du haut maison, recherche intégrée, sélection av
 
 ## v20 — correctif du blocage
 Cause trouvée grâce au journal : le tri par nom utilisait une expression régulière à chaque comparaison (plusieurs centaines de milliers de fois) sur le fil principal → « L'application ne répond pas ». Le tri est maintenant sans regex, fait en arrière-plan et mis en cache.
+
+## v24 — confort d'utilisation
+- Réglages réorganisés en sections (Affichage, Lecture, Onglets, Organisation, Aide), chaque option expliquée en une phrase, interrupteurs pour les réglages oui/non.
+- « Boutons et gestes » : guide complet (Réglages → Aide, ou ⋮ dans le lecteur).
+- Zoom par pincement sur les photos (jusqu'à ×5), glisser pour se déplacer, double-tap pour revenir.
+- Astuce affichée une seule fois à la première ouverture du lecteur.
+- Descriptions d'accessibilité sur tous les boutons-icônes ; « À propos » avec mention de confidentialité (aucun accès Internet).

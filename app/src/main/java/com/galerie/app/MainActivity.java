@@ -37,6 +37,7 @@ import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -133,11 +134,15 @@ public class MainActivity extends Activity {
     private LinearLayout permissionView;
     private final LinearLayout[] navItems = new LinearLayout[4];
 
-    // réglages (lignes)
+    // réglages : titres de section, choix, interrupteurs, actions
     private static class Setting {
-        TextView view;
-        Supplier<String> title, value;
+        String header;              // non nul = titre de section
+        String title, desc;
+        Supplier<String> value;     // valeur affichée à droite (choix)
+        Supplier<Boolean> toggle;   // non nul = interrupteur
         Runnable action;
+        TextView valueView;
+        Switch sw;
     }
 
     private final List<Setting> settings = new ArrayList<>();
@@ -305,6 +310,7 @@ public class MainActivity extends Activity {
         normalBar.setOrientation(LinearLayout.HORIZONTAL);
         normalBar.setGravity(Gravity.CENTER_VERTICAL);
         backBtn = Ui.iconButton(this, R.drawable.ic_back, v -> onBackPressed());
+        backBtn.setContentDescription("Retour");
         normalBar.addView(backBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout titleCol = new LinearLayout(this);
         titleCol.setOrientation(LinearLayout.VERTICAL);
@@ -323,10 +329,13 @@ public class MainActivity extends Activity {
         titleCol.addView(subtitleView);
         normalBar.addView(titleCol, new LinearLayout.LayoutParams(0, -2, 1));
         searchBtn = Ui.iconButton(this, R.drawable.ic_search, v -> openSearch());
+        searchBtn.setContentDescription("Rechercher");
         normalBar.addView(searchBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         shuffleBtn = Ui.iconButton(this, R.drawable.ic_shuffle, v -> playRandom());
+        shuffleBtn.setContentDescription("Lecture aléatoire");
         normalBar.addView(shuffleBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         moreBtn = Ui.iconButton(this, R.drawable.ic_more, v -> showMainMenu(v));
+        moreBtn.setContentDescription("Plus d'options");
         normalBar.addView(moreBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         topFrame.addView(normalBar, new FrameLayout.LayoutParams(-1, -1));
 
@@ -1150,63 +1159,160 @@ public class MainActivity extends Activity {
         return m == 1 ? "Média suivant (photo et vidéo)" : m == 2 ? "Aucune action" : "Reculer de 10 secondes (vidéo)";
     }
 
-    private void addSetting(Supplier<String> title, Supplier<String> value, Runnable action) {
+    private static String tapShort(int m) {
+        return m == 1 ? "Média suivant" : m == 2 ? "Aucune action" : "Reculer de 10 s";
+    }
+
+    private void section(String name) {
+        Setting s = new Setting();
+        s.header = name;
+        settings.add(s);
+    }
+
+    private void choice(String title, String desc, Supplier<String> value, Runnable action) {
         Setting s = new Setting();
         s.title = title;
+        s.desc = desc;
         s.value = value;
         s.action = action;
         settings.add(s);
     }
 
+    private void switchRow(String title, String desc, Supplier<Boolean> state, Runnable action) {
+        Setting s = new Setting();
+        s.title = title;
+        s.desc = desc;
+        s.toggle = state;
+        s.action = action;
+        settings.add(s);
+    }
+
+    private void actionRow(String title, String desc, Runnable action) {
+        Setting s = new Setting();
+        s.title = title;
+        s.desc = desc;
+        s.action = action;
+        settings.add(s);
+    }
+
+    private void saveBool(String key, boolean v) {
+        prefs().edit().putBoolean(key, v).apply();
+    }
+
     private void buildSettings() {
-        addSetting(() -> "Taille de la grille", () -> cols + " éléments par ligne", this::chooseColumns);
-        addSetting(() -> "Trier par", () -> sortName(sortMode, sortRev), this::chooseSort);
-        addSetting(() -> "Miniatures", () -> thumbsOriginal ? "Format original (image entière)" : "Carrées (rognées)", () -> {
-            thumbsOriginal = !thumbsOriginal;
-            prefs().edit().putBoolean("thumbs_original", thumbsOriginal).apply();
-            refreshSettings();
-            adapter.notifyDataSetChanged();
-        });
-        addSetting(() -> "Mode aléatoire", () -> randomOn
-                ? "Activé : suivant et fin de vidéo = au hasard"
-                : "Désactivé : suivant = ordre de la liste", () -> setRandom(!randomOn));
-        addSetting(() -> "Passage automatique des images", () -> photoDelay == 0
-                ? "Désactivé" : "Après " + photoDelay + " secondes", this::chooseDelay);
-        addSetting(() -> "Double-tap à gauche", () -> tapLabel(leftTap), this::chooseLeftTap);
-        addSetting(() -> "Vidéos dans l'onglet Photos", () -> includeVideos ? "Incluses" : "Exclues", () -> {
-            includeVideos = !includeVideos;
-            prefs().edit().putBoolean("inc_video", includeVideos).apply();
-            refreshSettings();
-        });
-        addSetting(() -> "Onglet Photos", () -> photosFolders ? "Par dossiers" : "En grille", () -> {
-            photosFolders = !photosFolders;
-            prefs().edit().putBoolean("photos_folders", photosFolders).apply();
-            refreshSettings();
-        });
-        addSetting(() -> "Onglet Vidéos", () -> videosFolders ? "Par dossiers" : "En grille", () -> {
-            videosFolders = !videosFolders;
-            prefs().edit().putBoolean("videos_folders", videosFolders).apply();
-            refreshSettings();
-        });
-        addSetting(() -> "Nouvel album", () -> "Créer un dossier dans Pictures", this::createAlbum);
-        addSetting(() -> "Actualiser la bibliothèque", () -> "Relire toutes les photos et vidéos", this::reload);
-        addSetting(() -> "Journal de diagnostic", () -> "Voir les plantages et blocages enregistrés", this::showJournal);
+        section("Affichage");
+        choice("Taille de la grille", "Nombre de miniatures par ligne.",
+                () -> cols + " par ligne", this::chooseColumns);
+        switchRow("Miniatures entières", "Montre chaque photo en entier, sans la recadrer. Désactivé : miniatures carrées.",
+                () -> thumbsOriginal, () -> {
+                    thumbsOriginal = !thumbsOriginal;
+                    saveBool("thumbs_original", thumbsOriginal);
+                    refreshSettings();
+                    adapter.notifyDataSetChanged();
+                });
+        choice("Trier par", "Ordre des photos, vidéos et dossiers.",
+                () -> sortName(sortMode, sortRev), this::chooseSort);
+
+        section("Lecture des photos et vidéos");
+        switchRow("Mode aléatoire", "« Suivant », la fin d'une vidéo et le passage automatique ouvrent un média au hasard. Activable aussi avec le bouton aléatoire du lecteur.",
+                () -> randomOn, () -> setRandom(!randomOn));
+        choice("Passage automatique des images", "Délai avant de passer à la photo suivante. Une vidéo passe à la suite quand elle se termine.",
+                () -> photoDelay == 0 ? "Désactivé" : photoDelay + " secondes", this::chooseDelay);
+        choice("Double-tap à gauche", "Action du double-tap sur la moitié gauche de l'écran. Sur la moitié droite : avance de 10 s dans une vidéo.",
+                () -> tapShort(leftTap), this::chooseLeftTap);
+
+        section("Onglets");
+        switchRow("Vidéos dans l'onglet Photos", "Affiche aussi les vidéos avec les photos.",
+                () -> includeVideos, () -> {
+                    includeVideos = !includeVideos;
+                    saveBool("inc_video", includeVideos);
+                    refreshSettings();
+                });
+        switchRow("Photos classées par dossiers", "L'onglet Photos montre vos dossiers au lieu d'une grille de toutes les photos.",
+                () -> photosFolders, () -> {
+                    photosFolders = !photosFolders;
+                    saveBool("photos_folders", photosFolders);
+                    refreshSettings();
+                });
+        switchRow("Vidéos classées par dossiers", "L'onglet Vidéos montre vos dossiers au lieu d'une grille de toutes les vidéos.",
+                () -> videosFolders, () -> {
+                    videosFolders = !videosFolders;
+                    saveBool("videos_folders", videosFolders);
+                    refreshSettings();
+                });
+
+        section("Organisation");
+        actionRow("Nouvel album", "Crée un dossier dans « Images ».", this::createAlbum);
+        actionRow("Actualiser la bibliothèque", "Relit toutes les photos et vidéos du téléphone.", this::reload);
+
+        section("Aide");
+        actionRow("Boutons et gestes", "Comment utiliser la galerie et le lecteur.", () -> Guide.show(this));
+        actionRow("Journal de diagnostic", "En cas de problème : copiez-le et envoyez-le au développeur.", this::showJournal);
+        actionRow("À propos", "Version et confidentialité.", this::showAbout);
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(0, dp(8), 0, dp(16));
-        for (Setting s : settings) {
+        list.setPadding(0, dp(4), 0, dp(24));
+        for (final Setting s : settings) {
+            if (s.header != null) {
+                TextView h = new TextView(this);
+                h.setText(s.header.toUpperCase(Locale.ROOT));
+                h.setTextColor(Ui.ACCENT);
+                h.setTextSize(12);
+                h.setTypeface(null, Typeface.BOLD);
+                h.setLetterSpacing(0.08f);
+                h.setPadding(dp(24), dp(22), dp(24), dp(8));
+                list.addView(h);
+                continue;
+            }
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(18), dp(14), dp(16), dp(14));
+            row.setBackground(Ui.rect(this, Ui.CARD, 16));
+            row.setOnClickListener(v -> s.action.run());
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
             TextView t = new TextView(this);
+            t.setText(s.title);
             t.setTextColor(Ui.TEXT);
             t.setTextSize(16);
-            t.setPadding(dp(20), dp(16), dp(20), dp(16));
-            t.setBackground(Ui.rect(this, Ui.CARD, 16));
-            final Runnable act = s.action;
-            t.setOnClickListener(v -> act.run());
+            col.addView(t);
+            if (s.desc != null) {
+                TextView d = new TextView(this);
+                d.setText(s.desc);
+                d.setTextColor(Ui.MUTED);
+                d.setTextSize(13);
+                d.setPadding(0, dp(3), 0, 0);
+                col.addView(d);
+            }
+            row.addView(col, new LinearLayout.LayoutParams(0, -2, 1));
+            if (s.toggle != null) {
+                s.sw = new Switch(this);
+                s.sw.setClickable(false);
+                s.sw.setFocusable(false);
+                LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-2, -2);
+                sl.leftMargin = dp(12);
+                row.addView(s.sw, sl);
+            } else if (s.value != null) {
+                s.valueView = new TextView(this);
+                s.valueView.setTextColor(Ui.ACCENT);
+                s.valueView.setTextSize(14);
+                s.valueView.setGravity(Gravity.END);
+                s.valueView.setMaxWidth(dp(130));
+                s.valueView.setPadding(dp(12), 0, 0, 0);
+                row.addView(s.valueView, new LinearLayout.LayoutParams(-2, -2));
+            } else {
+                TextView chev = new TextView(this);
+                chev.setText("›");
+                chev.setTextColor(Ui.MUTED);
+                chev.setTextSize(24);
+                chev.setPadding(dp(12), 0, 0, 0);
+                row.addView(chev);
+            }
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.setMargins(dp(12), dp(4), dp(12), dp(4));
-            list.addView(t, lp);
-            s.view = t;
+            list.addView(row, lp);
         }
         settingsView.addView(list);
         refreshSettings();
@@ -1214,14 +1320,22 @@ public class MainActivity extends Activity {
 
     private void refreshSettings() {
         for (Setting s : settings) {
-            String title = s.title.get();
-            String value = s.value.get();
-            android.text.SpannableString sp = new android.text.SpannableString(title + "\n" + value);
-            int st = title.length() + 1;
-            sp.setSpan(new android.text.style.ForegroundColorSpan(Ui.MUTED), st, sp.length(), 0);
-            sp.setSpan(new android.text.style.RelativeSizeSpan(0.85f), st, sp.length(), 0);
-            s.view.setText(sp);
+            if (s.sw != null) s.sw.setChecked(s.toggle.get());
+            if (s.valueView != null) s.valueView.setText(s.value.get());
         }
+    }
+
+    private void showAbout() {
+        String v = "";
+        try {
+            v = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) { }
+        new AlertDialog.Builder(this)
+                .setTitle("Galerie")
+                .setMessage("Version " + v + "\n\nVos photos et vidéos restent sur votre téléphone : "
+                        + "l'application n'envoie aucune donnée et n'utilise pas Internet.")
+                .setPositiveButton("OK", null)
+                .show();
     }
 
     private void chooseColumns() {

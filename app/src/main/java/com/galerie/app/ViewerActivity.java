@@ -6,12 +6,14 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.app.AlertDialog;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.GestureDetector;
+import android.view.ScaleGestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -51,6 +53,9 @@ public class ViewerActivity extends Activity {
     private ArrayList<String> paths;
     private int index;
     private boolean randomMode;
+    private ScaleGestureDetector scaler;
+    private float zoom = 1f, panX = 0f, panY = 0f, lastX, lastY;
+    private long lastScaleTime = 0;
     private int leftTap = 1;
     private int photoDelay = 0; // secondes ; 0 = pas de passage automatique des images
     private final ArrayDeque<String> history = new ArrayDeque<>();
@@ -109,6 +114,11 @@ public class ViewerActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         CrashLog.start(this);
+        SharedPreferences hintPrefs = getSharedPreferences("galerie", MODE_PRIVATE);
+        if (!hintPrefs.getBoolean("hint_seen", false)) {
+            hintPrefs.edit().putBoolean("hint_seen", true).apply();
+            Toast.makeText(this, "Astuce : glissez pour changer de média, pincez pour zoomer, ⋮ pour partager, déplacer ou supprimer.", Toast.LENGTH_LONG).show();
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
@@ -238,6 +248,7 @@ public class ViewerActivity extends Activity {
         topBar.setBackground(gradient(true));
         topBar.setPadding(dp(4), dp(4), dp(12), dp(16));
         ImageButton back = ibtn(R.drawable.ic_back, v -> finish());
+        back.setContentDescription("Retour");
         back.setPadding(dp(12), dp(12), dp(12), dp(12));
         topBar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout titleCol = new LinearLayout(this);
@@ -263,6 +274,7 @@ public class ViewerActivity extends Activity {
         topBar.addView(counter);
         ImageButton more = ibtn(R.drawable.ic_more, v -> showMenu(v));
         more.setPadding(dp(12), dp(12), dp(12), dp(12));
+        more.setContentDescription("Plus d'options");
         topBar.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
         root.addView(topBar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
@@ -303,10 +315,15 @@ public class ViewerActivity extends Activity {
         pill.setBackground(pg);
 
         restartBtn = ibtn(R.drawable.ic_restart, v -> restart());
+        restartBtn.setContentDescription("Relancer");
         ImageButton prevBtn = ibtn(R.drawable.ic_prev, v -> prev());
+        prevBtn.setContentDescription("Précédent");
         playBtn = ibtn(R.drawable.ic_pause, v -> togglePlay());
+        playBtn.setContentDescription("Lecture ou pause");
         ImageButton nextBtn = ibtn(R.drawable.ic_next, v -> next());
+        nextBtn.setContentDescription("Suivant");
         randomBtn = ibtn(R.drawable.ic_shuffle, v -> toggleRandom());
+        randomBtn.setContentDescription("Mode aléatoire");
 
         pill.addView(restartBtn, new LinearLayout.LayoutParams(0, dp(52), 1));
         divider1 = divider();
@@ -434,8 +451,10 @@ public class ViewerActivity extends Activity {
         pm.getMenu().add(0, 1, 0, "Déplacer vers…");
         pm.getMenu().add(0, 2, 0, "Supprimer");
         pm.getMenu().add(0, 3, 0, "Propriétés");
+        pm.getMenu().add(0, 5, 0, "Boutons et gestes");
         pm.setOnMenuItemClickListener(it -> {
-            if (it.getItemId() == 4) Share.send(this, Collections.singletonList(paths.get(index)));
+            if (it.getItemId() == 5) Guide.show(this);
+            else if (it.getItemId() == 4) Share.send(this, Collections.singletonList(paths.get(index)));
             else if (it.getItemId() == 1) moveCurrent();
             else if (it.getItemId() == 2) deleteCurrent();
             else showInfo();
@@ -543,6 +562,15 @@ public class ViewerActivity extends Activity {
     }
 
     private void setupGestures() {
+        scaler = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScale(ScaleGestureDetector d) {
+                if (isVideo) return false;
+                zoom = Math.max(1f, Math.min(5f, zoom * d.getScaleFactor()));
+                applyZoom();
+                return true;
+            }
+        });
         gestures = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onDown(MotionEvent e) {
@@ -559,6 +587,7 @@ public class ViewerActivity extends Activity {
             @Override
             public boolean onDoubleTap(MotionEvent e) {
                 if (onControls(e)) return false;
+                if (zoom > 1.01f) { resetZoom(); return true; } // photo zoomée : double-tap = taille normale
                 // côté gauche : réglage (média suivant / -10 s / rien) ; côté droit : +10 s (vidéo)
                 int w = getResources().getDisplayMetrics().widthPixels;
                 if (e.getRawX() < w / 2f) {
@@ -571,6 +600,7 @@ public class ViewerActivity extends Activity {
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
                 if (e1 == null || onControls(e1)) return false;
+                if (zoom > 1.01f || System.currentTimeMillis() - lastScaleTime < 400) return false; // pincement / photo zoomée
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > dp(80)) {
@@ -588,14 +618,49 @@ public class ViewerActivity extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (!isVideo && scaler != null) {
+            scaler.onTouchEvent(ev);
+            if (scaler.isInProgress()) lastScaleTime = System.currentTimeMillis();
+            int act = ev.getActionMasked();
+            if (act == MotionEvent.ACTION_DOWN || act == MotionEvent.ACTION_POINTER_UP) {
+                int k = act == MotionEvent.ACTION_POINTER_UP && ev.getActionIndex() == 0 ? 1 : 0;
+                lastX = ev.getX(k);
+                lastY = ev.getY(k);
+            } else if (act == MotionEvent.ACTION_MOVE && zoom > 1.01f && ev.getPointerCount() == 1 && !scaler.isInProgress()) {
+                panX += ev.getX() - lastX;
+                panY += ev.getY() - lastY;
+                lastX = ev.getX();
+                lastY = ev.getY();
+                applyZoom();
+            }
+        }
         if (gestures != null) gestures.onTouchEvent(ev);
         return super.dispatchTouchEvent(ev);
     }
 
     // ------------------------------------------------------------------ affichage d'un élément
 
+    private void applyZoom() {
+        float maxX = imageView.getWidth() * (zoom - 1f) / 2f;
+        float maxY = imageView.getHeight() * (zoom - 1f) / 2f;
+        panX = Math.max(-maxX, Math.min(maxX, panX));
+        panY = Math.max(-maxY, Math.min(maxY, panY));
+        imageView.setScaleX(zoom);
+        imageView.setScaleY(zoom);
+        imageView.setTranslationX(zoom > 1.01f ? panX : 0f);
+        imageView.setTranslationY(zoom > 1.01f ? panY : 0f);
+    }
+
+    private void resetZoom() {
+        zoom = 1f;
+        panX = 0f;
+        panY = 0f;
+        if (imageView != null) applyZoom();
+    }
+
     private void show(int i) {
         index = i;
+        resetZoom();
         if (root != null) root.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
         final String p = paths.get(i);
         final File f = new File(p);
@@ -622,7 +687,7 @@ public class ViewerActivity extends Activity {
             imageView.setVisibility(View.VISIBLE);
             imageView.setImageDrawable(null);
             DisplayMetrics dm = getResources().getDisplayMetrics();
-            final int req = Math.max(dm.widthPixels, dm.heightPixels);
+            final int req = Math.max(dm.widthPixels, dm.heightPixels) * 2; // résolution doublée pour pouvoir zoomer
             loader.execute(() -> {
                 Bitmap bm = null;
                 try {
