@@ -68,3 +68,6 @@ Cause trouvée grâce au journal : le tri par nom utilisait une expression régu
 
 ## v25 — déplacement : grand sélecteur de dossiers
 Plein écran : liste de tous vos albums dès l'ouverture, navigation dossier par dossier (« Parcourir tout le stockage »), recherche dans tous les dossiers du téléphone, bouton « Choisir » sur chaque ligne, « Choisir ce dossier » en bas, création de dossier au bon endroit, nombre d'éléments affiché pour les dossiers connus. Utilisé pour déplacer des médias (galerie et lecteur) et des dossiers.
+
+## v27 — sélecteur de dossier « comme une vraie galerie »
+Titre centré, bouton « Nouveau dossier » et loupe en haut ; chaque album avec sa miniature (format d'origine), son nom, son nombre d'éléments et son chemin ; toucher un album le choisit directement. La loupe ouvre la recherche (résultats dans le même style).
