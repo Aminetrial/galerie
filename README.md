@@ -65,3 +65,6 @@ Cause trouvée grâce au journal : le tri par nom utilisait une expression régu
 - Zoom par pincement sur les photos (jusqu'à ×5), glisser pour se déplacer, double-tap pour revenir.
 - Astuce affichée une seule fois à la première ouverture du lecteur.
 - Descriptions d'accessibilité sur tous les boutons-icônes ; « À propos » avec mention de confidentialité (aucun accès Internet).
+
+## v25 — déplacement : grand sélecteur de dossiers
+Plein écran : navigation dossier par dossier, recherche dans tous les dossiers du téléphone, bouton « Choisir » sur chaque ligne, « Choisir ce dossier » en bas, création de dossier au bon endroit, nombre d'éléments affiché pour les dossiers connus. Utilisé pour déplacer des médias (galerie et lecteur) et des dossiers.
