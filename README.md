@@ -77,3 +77,6 @@ Titre centré, bouton « Nouveau dossier » et loupe en haut ; chaque album avec
 - Une seule ligne de commandes en bas : ↻ ⏮ ⏯ ⏭ 🔀 puis 🗑 **Supprimer** à droite ; barre de progression au-dessus pour les vidéos.
 - Barre du haut : ←, nom du fichier et dossier, position, ⋮ (Partager, Déplacer vers…, Propriétés, Boutons et gestes).
 - Suppression en 1 clic sans confirmation : le média suivant s'affiche aussitôt avec un bandeau « supprimé · ANNULER ». Le fichier n'est réellement effacé qu'au bout de 6 s, à la prochaine suppression ou à la fermeture du lecteur.
+
+## v30 — nouveau dossier toujours dans la galerie
+Depuis le sélecteur de dossiers (déplacer), « Nouveau dossier » crée désormais le dossier dans Pictures (au niveau de la galerie), même si vous parcouriez un autre dossier. Le sélecteur revient à la liste des albums où le nouveau dossier apparaît en premier, et l'onglet Albums se met à jour à la fermeture.

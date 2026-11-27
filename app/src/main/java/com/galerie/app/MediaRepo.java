@@ -162,12 +162,14 @@ public class MediaRepo {
         albums.addAll(map.values()); // déjà triés par activité récente
         // albums vides créés par l'utilisateur
         Set<String> keep = new HashSet<>();
+        List<Album> fresh = new ArrayList<>();
         for (String p : prefs(c).getStringSet("empty_albums", new HashSet<>())) {
             if (map.containsKey(p)) continue;          // n'est plus vide
             if (!new File(p).isDirectory()) continue;  // supprimé
             keep.add(p);
-            albums.add(new Album(p));
+            fresh.add(new Album(p));
         }
+        albums.addAll(0, fresh); // les dossiers neufs d'abord : on les retrouve tout de suite
         prefs(c).edit().putStringSet("empty_albums", keep).apply();
     }
 

@@ -681,6 +681,14 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** Appelé quand le sélecteur de dossiers se ferme : affiche un dossier qui vient d'être créé. */
+    void albumsChanged() {
+        if (repo.dirty && repo.loaded) {
+            repo.dirty = false;
+            rebuildRows();
+        }
+    }
+
     private void rebuildRows() {
         boolean needsSorted = repo.loaded && tab != TAB_SETTINGS && !(isFolderView() && query.trim().isEmpty());
         if (needsSorted && !sortKey().equals(sortedKey)) {

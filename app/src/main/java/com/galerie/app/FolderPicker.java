@@ -192,7 +192,10 @@ public class FolderPicker {
         box.addView(hereBtn, hp);
 
         dialog = new Dialog(act, android.R.style.Theme_Material_NoActionBar);
-        dialog.setOnDismissListener(d -> thumbs.shutdown());
+        dialog.setOnDismissListener(d -> {
+            thumbs.shutdown();
+            if (act instanceof MainActivity) ((MainActivity) act).albumsChanged();
+        });
         dialog.setContentView(box);
         dialog.setOnKeyListener((d, code, ev) -> {
             if (code == KeyEvent.KEYCODE_BACK && ev.getAction() == KeyEvent.ACTION_UP) {
@@ -415,11 +418,9 @@ public class FolderPicker {
 
     // ------------------------------------------------------------------ nouveau dossier
 
+    /** Le nouveau dossier est toujours créé « dans la galerie » (Pictures), jamais dans le dossier parcouru. */
     private void newFolder() {
-        if (home && query.isEmpty()) {
-            current = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-            if (!current.isDirectory()) current.mkdirs();
-        }
+        final File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
         final EditText et = new EditText(act);
         et.setSingleLine(true);
         et.setHint("Nom du dossier");
@@ -427,7 +428,7 @@ public class FolderPicker {
         box.setPadding(dp(20), dp(8), dp(20), 0);
         box.addView(et);
         AlertDialog d = new AlertDialog.Builder(act)
-                .setTitle("Nouveau dossier dans « " + (current.equals(root) ? "Stockage" : current.getName()) + " »")
+                .setTitle("Nouveau dossier dans la galerie")
                 .setView(box)
                 .setPositiveButton("Créer", (dd, w) -> {
                     String n = et.getText().toString().trim();
@@ -435,10 +436,18 @@ public class FolderPicker {
                         Toast.makeText(act, "Nom invalide", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    File nd = new File(current, n);
-                    if (nd.isDirectory() || nd.mkdir()) {
+                    File nd = new File(pictures, n);
+                    if (nd.isDirectory() || nd.mkdirs()) {
+                        MediaRepo repo = MediaRepo.get();
                         MediaRepo.addEmptyAlbum(act, nd.getAbsolutePath());
-                        open(nd);
+                        repo.rebuildAlbums(act);
+                        repo.dirty = true;
+                        // retour à la liste des albums : le nouveau dossier est en haut
+                        home = true;
+                        current = pictures;
+                        if (!query.isEmpty()) searchEdit.setText(""); // le watcher relance refresh()
+                        else refresh();
+                        Toast.makeText(act, "Dossier « " + n + " » créé dans la galerie", Toast.LENGTH_SHORT).show();
                     } else Toast.makeText(act, "Impossible de créer le dossier", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("Annuler", null)
