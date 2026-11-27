@@ -121,7 +121,7 @@ public class ViewerActivity extends Activity {
         SharedPreferences hintPrefs = getSharedPreferences("galerie", MODE_PRIVATE);
         if (!hintPrefs.getBoolean("hint_seen", false)) {
             hintPrefs.edit().putBoolean("hint_seen", true).apply();
-            Toast.makeText(this, "Astuce : glissez pour changer de média, pincez pour zoomer, 🗑 pour supprimer (annulable), ⋮ pour partager ou déplacer.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Astuce : glissez pour changer de média, pincez pour zoomer, 🗑 pour mettre à la corbeille (annulable), ⋮ pour partager ou déplacer.", Toast.LENGTH_LONG).show();
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -556,12 +556,12 @@ public class ViewerActivity extends Activity {
         shuffleBag.clear();
         if (paths.isEmpty()) {
             commitPending();
-            Toast.makeText(this, "Fichier supprimé", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Mis à la corbeille", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
         show(Math.min(index, paths.size() - 1));
-        snackText.setText(video ? "Vidéo supprimée" : "Photo supprimée");
+        snackText.setText(video ? "Vidéo mise à la corbeille" : "Photo mise à la corbeille");
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) snack.getLayoutParams();
         lp.bottomMargin = (isVideo ? dp(124) : dp(84));
         snack.setLayoutParams(lp);
@@ -591,7 +591,7 @@ public class ViewerActivity extends Activity {
         pendingIndex = -1;
         if (path == null) return;
         File f = new File(path);
-        if (!f.delete() && f.exists()) {
+        if (!Trash.moveToTrash(f) && f.exists()) {
             Toast.makeText(this, "Impossible de supprimer " + f.getName(), Toast.LENGTH_SHORT).show();
             return;
         }

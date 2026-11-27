@@ -192,6 +192,7 @@ public class MainActivity extends Activity {
             return;
         }
         permissionView.setVisibility(View.GONE);
+        bg.execute(Trash::purgeExpired);
         randomOn = prefs().getBoolean("random_on", false);
         refreshSettings();
         if (!repo.loaded) {
@@ -689,6 +690,16 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void openTrash() {
+        startActivity(new android.content.Intent(this, TrashActivity.class));
+    }
+
+    private String trashSummary() {
+        int n = Trash.count();
+        return (n == 0 ? "Vide" : n + (n > 1 ? " éléments" : " élément"))
+                + " · les éléments supprimés y restent 30 jours, puis sont effacés définitivement.";
+    }
+
     private void rebuildRows() {
         boolean needsSorted = repo.loaded && tab != TAB_SETTINGS && !(isFolderView() && query.trim().isEmpty());
         if (needsSorted && !sortKey().equals(sortedKey)) {
@@ -960,16 +971,16 @@ public class MainActivity extends Activity {
         final List<MediaItem> items = new ArrayList<>(selected);
         if (items.isEmpty()) return;
         new AlertDialog.Builder(this)
-                .setTitle("Supprimer " + items.size() + (items.size() > 1 ? " éléments ?" : " élément ?"))
-                .setMessage("Cette action est définitive.")
-                .setPositiveButton("Supprimer", (d, w) -> {
+                .setTitle("Mettre " + items.size() + (items.size() > 1 ? " éléments" : " élément") + " à la corbeille ?")
+                .setMessage("Ils restent 30 jours dans la corbeille (restauration possible), puis sont supprimés définitivement.")
+                .setPositiveButton("Mettre à la corbeille", (d, w) -> {
                     endSelection();
                     runBusy(() -> {
                         final List<MediaItem> done = new ArrayList<>();
                         final List<String> paths = new ArrayList<>();
                         for (MediaItem m : items) {
                             File f = new File(m.path);
-                            if (f.delete() || !f.exists()) {
+                            if (Trash.moveToTrash(f) || !f.exists()) {
                                 MediaRepo.deleteFromMediaStore(this, m);
                                 done.add(m);
                                 paths.add(m.path);
@@ -979,7 +990,7 @@ public class MainActivity extends Activity {
                             repo.removed(this, done);
                             MediaRepo.scan(this, paths);
                             rebuildRows();
-                            toast(done.size() + (done.size() > 1 ? " éléments supprimés" : " élément supprimé"));
+                            toast(done.size() + (done.size() > 1 ? " éléments mis à la corbeille" : " élément mis à la corbeille"));
                         });
                     });
                 })
@@ -1104,19 +1115,23 @@ public class MainActivity extends Activity {
     private void deleteAlbum(final MediaRepo.Album a) {
         new AlertDialog.Builder(this)
                 .setTitle("Supprimer le dossier ?")
-                .setMessage("« " + a.name + " » et tout son contenu seront supprimés définitivement.")
+                .setMessage("Les photos et vidéos de « " + a.name + " » (sous-dossiers compris) vont à la corbeille pendant 30 jours ; le dossier est supprimé.")
                 .setPositiveButton("Supprimer", (d, w) -> {
-                    final List<MediaItem> items = new ArrayList<>(a.items);
                     final String path = a.path;
+                    final List<MediaItem> items = new ArrayList<>();
+                    for (MediaItem m : repo.all) if (m.path.startsWith(path + "/")) items.add(m);
                     runBusy(() -> {
-                        FileUtil.deleteRecursive(new File(path));
-                        for (MediaItem m : items) MediaRepo.deleteFromMediaStore(this, m);
+                        for (MediaItem m : items) {
+                            File f = new File(m.path);
+                            if (Trash.moveToTrash(f) || !f.exists()) MediaRepo.deleteFromMediaStore(this, m);
+                        }
+                        FileUtil.deleteRecursive(new File(path)); // ce qui reste (fichiers non médias, dossiers vides)
                         post(() -> {
                             List<String> touched = repo.folderChanged(this, path, null);
                             MediaRepo.scan(this, touched);
                             if (path.equals(openAlbum)) openAlbum = null;
                             rebuildRows();
-                            toast("Dossier supprimé");
+                            toast("Dossier supprimé · contenu à la corbeille");
                         });
                     });
                 })
@@ -1133,6 +1148,7 @@ public class MainActivity extends Activity {
             pm.getMenu().add(0, 2, 0, "Trier par…");
             pm.getMenu().add(0, 3, 0, "Nouvel album");
         }
+        pm.getMenu().add(0, 5, 0, "Corbeille");
         pm.getMenu().add(0, 4, 0, "Actualiser");
         pm.setOnMenuItemClickListener(it -> {
             switch (it.getItemId()) {
@@ -1145,6 +1161,7 @@ public class MainActivity extends Activity {
                     break;
                 case 2: chooseSort(); break;
                 case 3: createAlbum(); break;
+                case 5: openTrash(); break;
                 default: reload();
             }
             return true;
@@ -1251,6 +1268,7 @@ public class MainActivity extends Activity {
 
         section("Organisation");
         actionRow("Nouvel album", "Crée un dossier dans « Images ».", this::createAlbum);
+        actionRow("Corbeille", trashSummary(), this::openTrash);
         actionRow("Actualiser la bibliothèque", "Relit toutes les photos et vidéos du téléphone.", this::reload);
 
         section("Aide");

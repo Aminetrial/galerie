@@ -80,3 +80,10 @@ Titre centré, bouton « Nouveau dossier » et loupe en haut ; chaque album avec
 
 ## v30 — nouveau dossier toujours dans la galerie
 Depuis le sélecteur de dossiers (déplacer), « Nouveau dossier » crée désormais le dossier dans Pictures (au niveau de la galerie), même si vous parcouriez un autre dossier. Le sélecteur revient à la liste des albums où le nouveau dossier apparaît en premier, et l'onglet Albums se met à jour à la fermeture.
+
+## v31 — corbeille (30 jours)
+- Tout ce qui est supprimé (lecteur 🗑, sélection, dossier) va dans une corbeille : dossier caché `.Galerie-corbeille` du stockage interne (avec `.nomedia`), index `index.tsv` (chemin d'origine, date, taille).
+- Écran Corbeille (⋮ de la galerie, ou Réglages → Organisation) : grille de miniatures avec jours restants, sélection, **Restaurer** (retour dans le dossier d'origine, renommé si le nom est pris) et **Supprimer** (confirmation, définitif), « Tout sélectionner », « Vider la corbeille ».
+- Suppression définitive automatique après 30 jours (à l'ouverture de l'appli et de la corbeille).
+- Supprimer un dossier met toutes ses photos et vidéos (sous-dossiers compris) à la corbeille.
+- Les fichiers occupent toujours de la place tant qu'ils sont dans la corbeille.
