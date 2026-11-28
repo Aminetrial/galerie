@@ -87,3 +87,6 @@ Depuis le sélecteur de dossiers (déplacer), « Nouveau dossier » crée désor
 - Suppression définitive automatique après 30 jours (à l'ouverture de l'appli et de la corbeille).
 - Supprimer un dossier met toutes ses photos et vidéos (sous-dossiers compris) à la corbeille.
 - Les fichiers occupent toujours de la place tant qu'ils sont dans la corbeille.
+
+## v32 — contenu du mode aléatoire
+Nouveau réglage « Contenu de l'aléatoire » (Réglages → Lecture) : **Vidéos seulement**, **Photos seulement** ou **Photos et vidéos**. Appui long sur le bouton 🔀 du lecteur pour le changer à la volée (ça active aussi l'aléatoire). Il s'applique au bouton 🔀 de la galerie, à « suivant », à la fin d'une vidéo et au passage automatique ; le tirage reste sans répétition.

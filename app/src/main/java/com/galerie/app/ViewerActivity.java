@@ -57,6 +57,7 @@ public class ViewerActivity extends Activity {
     private float zoom = 1f, panX = 0f, panY = 0f, lastX, lastY;
     private long lastScaleTime = 0;
     private int leftTap = 1;
+    private int randomKind = 2; // 0 = vidéos seulement, 1 = photos seulement, 2 = les deux
     private int photoDelay = 0; // secondes ; 0 = pas de passage automatique des images
     private final ArrayDeque<String> history = new ArrayDeque<>();
     private final ArrayList<Integer> shuffleBag = new ArrayList<>();
@@ -131,6 +132,7 @@ public class ViewerActivity extends Activity {
         android.content.SharedPreferences prefs = getSharedPreferences("galerie", MODE_PRIVATE);
         photoDelay = prefs.getInt("photo_delay", 0);
         leftTap = prefs.getInt("left_tap", 1);
+        randomKind = prefs.getInt("random_kind", 2);
         if (state != null) {
             paths = sPaths;
             index = state.getInt("index", 0);
@@ -343,7 +345,12 @@ public class ViewerActivity extends Activity {
         nextBtn.setContentDescription("Suivant");
         nextBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
         randomBtn = ibtn(R.drawable.ic_shuffle, v -> toggleRandom());
-        randomBtn.setContentDescription("Mode aléatoire");
+        randomBtn.setContentDescription("Mode aléatoire (appui long : vidéos, photos ou les deux)");
+        randomBtn.setOnLongClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            chooseRandomKind();
+            return true;
+        });
         randomBtn.setPadding(dp(9), dp(9), dp(9), dp(9));
         ImageButton delBtn = ibtn(R.drawable.ic_delete, v -> deleteOneClick());
         delBtn.setContentDescription("Supprimer");
@@ -460,7 +467,8 @@ public class ViewerActivity extends Activity {
         shuffleBag.clear();
         getSharedPreferences("galerie", MODE_PRIVATE).edit().putBoolean("random_on", randomMode).apply();
         styleRandomBtn();
-        Toast.makeText(this, randomMode ? "Aléatoire activé" : "Aléatoire désactivé", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, randomMode ? "Aléatoire activé · " + MainActivity.randomKindName(randomKind).toLowerCase(java.util.Locale.FRANCE)
+                : "Aléatoire désactivé", Toast.LENGTH_SHORT).show();
     }
 
     private void updateButtonsForType() {
@@ -846,11 +854,45 @@ public class ViewerActivity extends Activity {
         else goTo((index + 1) % paths.size());
     }
 
+    private boolean randomAllows(String path) {
+        if (randomKind == 2) return true;
+        boolean video = FileUtil.isVideo(new File(path));
+        return randomKind == 0 ? video : !video;
+    }
+
+    /** Appui long sur 🔀 : l'aléatoire ouvre seulement des vidéos, seulement des photos, ou les deux. */
+    private void chooseRandomKind() {
+        h.removeCallbacks(autoHide);
+        final String[] labels = {"Vidéos seulement", "Photos seulement", "Photos et vidéos (les deux)"};
+        new AlertDialog.Builder(this)
+                .setTitle("L'aléatoire ouvre…")
+                .setSingleChoiceItems(labels, randomKind, (d, w) -> {
+                    randomKind = w;
+                    shuffleBag.clear();
+                    getSharedPreferences("galerie", MODE_PRIVATE).edit()
+                            .putInt("random_kind", w).putBoolean("random_on", true).apply();
+                    if (!randomMode) {
+                        randomMode = true;
+                        styleRandomBtn();
+                    }
+                    Toast.makeText(this, "Aléatoire : " + labels[w].toLowerCase(java.util.Locale.FRANCE), Toast.LENGTH_SHORT).show();
+                    d.dismiss();
+                })
+                .setNegativeButton("Fermer", null)
+                .setOnDismissListener(dd -> scheduleAutoHide())
+                .show();
+    }
+
     /** Aléatoire « sans répétition » : chaque élément passe une fois avant de recommencer. */
     private void randomJump() {
         if (paths.size() < 2) return;
         if (shuffleBag.isEmpty()) {
-            for (int i = 0; i < paths.size(); i++) if (i != index) shuffleBag.add(i);
+            for (int i = 0; i < paths.size(); i++) if (i != index && randomAllows(paths.get(i))) shuffleBag.add(i);
+            if (shuffleBag.isEmpty()) {
+                Toast.makeText(this, randomKind == 0 ? "Aucune autre vidéo dans cette liste" : "Aucune autre photo dans cette liste",
+                        Toast.LENGTH_SHORT).show();
+                return;
+            }
             Collections.shuffle(shuffleBag);
         }
         int r = shuffleBag.remove(shuffleBag.size() - 1);

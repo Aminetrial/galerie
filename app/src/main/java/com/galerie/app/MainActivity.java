@@ -97,6 +97,7 @@ public class MainActivity extends Activity {
     private int leftTap = 1;       // 0 = -10 s, 1 = média suivant, 2 = rien
     private int photoDelay = 0;    // secondes (0 = désactivé)
     private boolean randomOn = false;
+    private int randomKind = 2; // 0 = vidéos seulement, 1 = photos seulement, 2 = les deux
     private int sortMode = SORT_DATE;
     private boolean sortRev = false;
     private boolean selecting = false;
@@ -171,6 +172,7 @@ public class MainActivity extends Activity {
         leftTap = p.getInt("left_tap", 1);
         photoDelay = p.getInt("photo_delay", 0);
         randomOn = p.getBoolean("random_on", false);
+        randomKind = p.getInt("random_kind", 2);
         sortMode = p.getInt("sort_mode", SORT_DATE);
         sortRev = p.getBoolean("sort_rev", false);
         if (state != null) {
@@ -194,6 +196,7 @@ public class MainActivity extends Activity {
         permissionView.setVisibility(View.GONE);
         bg.execute(Trash::purgeExpired);
         randomOn = prefs().getBoolean("random_on", false);
+        randomKind = prefs().getInt("random_kind", 2);
         refreshSettings();
         if (!repo.loaded) {
             if (!loading) reload();
@@ -859,8 +862,16 @@ public class MainActivity extends Activity {
     private void playRandom() {
         List<MediaItem> pool = new ArrayList<>();
         List<MediaItem> src = openAlbum != null && repo.album(openAlbum) != null ? repo.album(openAlbum).items : repo.all;
-        for (MediaItem m : src) if (passFilter(m)) pool.add(m);
-        if (pool.isEmpty()) { toast("Aucun média"); return; }
+        for (MediaItem m : src) {
+            if (!passFilter(m)) continue;
+            if (randomKind == 0 && !m.video) continue;
+            if (randomKind == 1 && m.video) continue;
+            pool.add(m);
+        }
+        if (pool.isEmpty()) {
+            toast(randomKind == 0 ? "Aucune vidéo ici" : randomKind == 1 ? "Aucune photo ici" : "Aucun média");
+            return;
+        }
         setRandom(true);
         openViewer(pool, random.nextInt(pool.size()));
     }
@@ -1241,6 +1252,8 @@ public class MainActivity extends Activity {
         section("Lecture des photos et vidéos");
         switchRow("Mode aléatoire", "« Suivant », la fin d'une vidéo et le passage automatique ouvrent un média au hasard. Activable aussi avec le bouton aléatoire du lecteur.",
                 () -> randomOn, () -> setRandom(!randomOn));
+        choice("Contenu de l'aléatoire", "Ce que le mode aléatoire ouvre : seulement des vidéos, seulement des photos, ou les deux. Dans le lecteur : appui long sur le bouton aléatoire.",
+                () -> randomKindName(randomKind), this::chooseRandomKind);
         choice("Passage automatique des images", "Délai avant de passer à la photo suivante. Une vidéo passe à la suite quand elle se termine.",
                 () -> photoDelay == 0 ? "Désactivé" : photoDelay + " secondes", this::chooseDelay);
         choice("Double-tap à gauche", "Action du double-tap sur la moitié gauche de l'écran. Sur la moitié droite : avance de 10 s dans une vidéo.",
@@ -1379,6 +1392,24 @@ public class MainActivity extends Activity {
                     prefs().edit().putInt("cols", cols).apply();
                     refreshSettings();
                     rebuildRows();
+                    d.dismiss();
+                })
+                .setNegativeButton("Fermer", null)
+                .show();
+    }
+
+    static String randomKindName(int k) {
+        return k == 0 ? "Vidéos seulement" : k == 1 ? "Photos seulement" : "Photos et vidéos";
+    }
+
+    private void chooseRandomKind() {
+        final String[] labels = {"Vidéos seulement", "Photos seulement", "Photos et vidéos (les deux)"};
+        new AlertDialog.Builder(this)
+                .setTitle("L'aléatoire ouvre…")
+                .setSingleChoiceItems(labels, randomKind, (d, w) -> {
+                    randomKind = w;
+                    prefs().edit().putInt("random_kind", w).apply();
+                    refreshSettings();
                     d.dismiss();
                 })
                 .setNegativeButton("Fermer", null)
