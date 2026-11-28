@@ -94,7 +94,8 @@ public class MainActivity extends Activity {
     private boolean photosFolders = false;
     private boolean videosFolders = true;
     private boolean thumbsOriginal = true;
-    private int leftTap = 1;       // 0 = -10 s, 1 = média suivant, 2 = rien
+    private int tapLeft = Taps.NEXT;   // action du double-tap à gauche (voir Taps)
+    private int tapRight = Taps.FAV;   // action du double-tap à droite (voir Taps)
     private int photoDelay = 0;    // secondes (0 = désactivé)
     private boolean randomOn = false;
     private int randomKind = 2; // 0 = vidéos seulement, 1 = photos seulement, 2 = les deux
@@ -169,7 +170,8 @@ public class MainActivity extends Activity {
         photosFolders = p.getBoolean("photos_folders", false);
         videosFolders = p.getBoolean("videos_folders", true);
         thumbsOriginal = p.getBoolean("thumbs_original", true);
-        leftTap = p.getInt("left_tap", 1);
+        tapLeft = Taps.left(p);
+        tapRight = Taps.right(p);
         photoDelay = p.getInt("photo_delay", 0);
         randomOn = p.getBoolean("random_on", false);
         randomKind = p.getInt("random_kind", 2);
@@ -1206,14 +1208,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static String tapLabel(int m) {
-        return m == 1 ? "Média suivant (photo et vidéo)" : m == 2 ? "Aucune action" : "Reculer de 10 secondes (vidéo)";
-    }
-
-    private static String tapShort(int m) {
-        return m == 1 ? "Média suivant" : m == 2 ? "Aucune action" : "Reculer de 10 s";
-    }
-
     private void section(String name) {
         Setting s = new Setting();
         s.header = name;
@@ -1271,8 +1265,12 @@ public class MainActivity extends Activity {
                 () -> randomKindName(randomKind), this::chooseRandomKind);
         choice("Passage automatique des images", "Délai avant de passer à la photo suivante. Une vidéo passe à la suite quand elle se termine.",
                 () -> photoDelay == 0 ? "Désactivé" : photoDelay + " secondes", this::chooseDelay);
-        choice("Double-tap à gauche", "Action du double-tap sur la moitié gauche de l'écran. Sur la moitié droite : avance de 10 s dans une vidéo.",
-                () -> tapShort(leftTap), this::chooseLeftTap);
+        choice("Double-tap à gauche", "Double-tap sur la moitié gauche de l'écran du lecteur : favori, ou aller de l'avant.",
+                () -> Taps.shortLabel(tapLeft), () -> chooseTap(true));
+        choice("Double-tap à droite", "Double-tap sur la moitié droite de l'écran du lecteur : favori, ou aller de l'avant. Les secondes en moins / en plus d'une vidéo sont dans la barre du bas.",
+                () -> Taps.shortLabel(tapRight), () -> chooseTap(false));
+        actionRow("Inverser gauche et droite", "Échange les deux actions : par exemple gauche = favori et droite = média suivant.",
+                this::swapTaps);
 
         section("Onglets");
         switchRow("Vidéos dans l'onglet Photos", "Affiche aussi les vidéos avec les photos.",
@@ -1463,17 +1461,28 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    private void chooseLeftTap() {
+    private void chooseTap(final boolean left) {
+        String[] labels = new String[Taps.COUNT];
+        for (int i = 0; i < Taps.COUNT; i++) labels[i] = Taps.label(i);
         new AlertDialog.Builder(this)
-                .setTitle("Double-tap à gauche")
-                .setSingleChoiceItems(new String[]{tapLabel(0), tapLabel(1), tapLabel(2)}, leftTap, (d, w) -> {
-                    leftTap = w;
-                    prefs().edit().putInt("left_tap", w).apply();
+                .setTitle(left ? "Double-tap à gauche" : "Double-tap à droite")
+                .setSingleChoiceItems(labels, left ? tapLeft : tapRight, (d, w) -> {
+                    if (left) tapLeft = w; else tapRight = w;
+                    Taps.save(prefs(), tapLeft, tapRight);
                     refreshSettings();
                     d.dismiss();
                 })
                 .setNegativeButton("Fermer", null)
                 .show();
+    }
+
+    private void swapTaps() {
+        int t = tapLeft;
+        tapLeft = tapRight;
+        tapRight = t;
+        Taps.save(prefs(), tapLeft, tapRight);
+        refreshSettings();
+        toast("Gauche : " + Taps.shortLabel(tapLeft) + " · Droite : " + Taps.shortLabel(tapRight));
     }
 
     private void showJournal() {

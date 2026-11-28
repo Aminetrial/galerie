@@ -56,7 +56,9 @@ public class ViewerActivity extends Activity {
     private ScaleGestureDetector scaler;
     private float zoom = 1f, panX = 0f, panY = 0f, lastX, lastY;
     private long lastScaleTime = 0;
-    private int leftTap = 1;
+    private int tapLeft = Taps.NEXT;
+    private int tapRight = Taps.FAV;
+    private ImageView heartPop;
     private int randomKind = 2; // 0 = vidéos seulement, 1 = photos seulement, 2 = les deux
     private int photoDelay = 0; // secondes ; 0 = pas de passage automatique des images
     private final ArrayDeque<String> history = new ArrayDeque<>();
@@ -68,7 +70,8 @@ public class ViewerActivity extends Activity {
     private LinearLayout topBar, bottom, seekBlock;
     private TextView title, folderView, counter, timeCur, timeTotal;
     private SeekBar seek;
-    private ImageButton restartBtn, playBtn, randomBtn, favBtn;
+    private ImageButton playBtn, randomBtn, favBtn;
+    private Button back10Btn, fwd10Btn;
     private LinearLayout snack;
     private TextView snackText;
     private String pendingPath;
@@ -132,7 +135,8 @@ public class ViewerActivity extends Activity {
 
         android.content.SharedPreferences prefs = getSharedPreferences("galerie", MODE_PRIVATE);
         photoDelay = prefs.getInt("photo_delay", 0);
-        leftTap = prefs.getInt("left_tap", 1);
+        tapLeft = Taps.left(prefs);
+        tapRight = Taps.right(prefs);
         randomKind = prefs.getInt("random_kind", 2);
         if (state != null) {
             paths = sPaths;
@@ -332,9 +336,8 @@ public class ViewerActivity extends Activity {
         pg.setCornerRadius(dp(28));
         pill.setBackground(pg);
 
-        restartBtn = ibtn(R.drawable.ic_restart, v -> restart());
-        restartBtn.setContentDescription("Relancer");
-        restartBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
+        back10Btn = skipButton("−10", "Reculer de 10 secondes", -10000);
+        fwd10Btn = skipButton("+10", "Avancer de 10 secondes", 10000);
         ImageButton prevBtn = ibtn(R.drawable.ic_prev, v -> prev());
         prevBtn.setContentDescription("Précédent");
         prevBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
@@ -366,10 +369,11 @@ public class ViewerActivity extends Activity {
         delBg.setColor(0x2EFF5C5C);
         delBtn.setBackground(delBg);
 
-        pill.addView(restartBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
-        pill.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        // ⏮  −10  ⏯  +10  ⏭   (−10 / +10 seulement pour une vidéo)
         pill.addView(prevBtn, new LinearLayout.LayoutParams(dp(42), dp(44)));
+        pill.addView(back10Btn, new LinearLayout.LayoutParams(dp(40), dp(40)));
         pill.addView(playBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        pill.addView(fwd10Btn, new LinearLayout.LayoutParams(dp(40), dp(40)));
         pill.addView(nextBtn, new LinearLayout.LayoutParams(dp(42), dp(44)));
         pill.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
         LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(dp(38), dp(38));
@@ -459,6 +463,27 @@ public class ViewerActivity extends Activity {
         });
     }
 
+    private void popHeart(boolean added) {
+        if (heartPop == null) {
+            heartPop = new ImageView(this);
+            heartPop.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            heartPop.setPadding(dp(8), dp(8), dp(8), dp(8));
+            heartPop.setVisibility(View.GONE);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(112), dp(112), Gravity.CENTER);
+            root.addView(heartPop, lp);
+        }
+        heartPop.animate().cancel();
+        heartPop.setImageResource(added ? R.drawable.ic_heart_filled : R.drawable.ic_heart);
+        heartPop.setColorFilter(added ? 0xFFFF5A6E : 0xFFFFFFFF);
+        heartPop.setAlpha(0f);
+        heartPop.setScaleX(0.6f);
+        heartPop.setScaleY(0.6f);
+        heartPop.setVisibility(View.VISIBLE);
+        heartPop.animate().alpha(1f).scaleX(1.1f).scaleY(1.1f).setDuration(160)
+                .withEndAction(() -> heartPop.animate().alpha(0f).scaleX(1.3f).scaleY(1.3f).setStartDelay(260).setDuration(240)
+                        .withEndAction(() -> heartPop.setVisibility(View.GONE)).start()).start();
+    }
+
     private void updateFavIcon() {
         if (favBtn == null || paths == null || index < 0 || index >= paths.size()) return;
         boolean fav = Favorites.is(paths.get(index));
@@ -468,14 +493,45 @@ public class ViewerActivity extends Activity {
     }
 
     private void toggleFavorite() {
+        toggleFavorite(false);
+    }
+
+    /** Double-tap (fromGesture) : gros cœur au centre ; bouton ♥ : petit message. */
+    private void toggleFavorite(boolean fromGesture) {
         boolean now = Favorites.toggle(paths.get(index));
         updateFavIcon();
+        if (fromGesture) {
+            popHeart(now);
+            return;
+        }
         favBtn.animate().cancel();
         favBtn.setScaleX(1f);
         favBtn.setScaleY(1f);
         favBtn.animate().scaleX(1.3f).scaleY(1.3f).setDuration(110)
                 .withEndAction(() -> favBtn.animate().scaleX(1f).scaleY(1f).setDuration(110).start()).start();
         Toast.makeText(this, now ? "Ajouté aux favoris" : "Retiré des favoris", Toast.LENGTH_SHORT).show();
+    }
+
+    private void doTapAction(int action) {
+        switch (action) {
+            case Taps.NEXT: next(); break; // suivant, ou au hasard si l'aléatoire est activé
+            case Taps.FAV: toggleFavorite(true); break;
+            default: break;
+        }
+    }
+
+    private Button skipButton(String text, String description, final int ms) {
+        Button b = btn(text, 13, v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+            skip(ms);
+        });
+        b.setTypeface(null, android.graphics.Typeface.BOLD);
+        b.setContentDescription(description);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(0x1FFFFFFF);
+        b.setBackground(g);
+        return b;
     }
 
     private void styleRandomBtn() {
@@ -498,8 +554,10 @@ public class ViewerActivity extends Activity {
     private void updateButtonsForType() {
         boolean slide = !isVideo && photoDelay > 0;
         int v = isVideo || slide ? View.VISIBLE : View.GONE;
-        restartBtn.setVisibility(v);
         playBtn.setVisibility(v);
+        int vv = isVideo ? View.VISIBLE : View.GONE;
+        back10Btn.setVisibility(vv);
+        fwd10Btn.setVisibility(vv);
         seekBlock.setVisibility(isVideo ? View.VISIBLE : View.GONE);
     }
 
@@ -548,9 +606,11 @@ public class ViewerActivity extends Activity {
         pm.getMenu().add(0, 4, 0, "Partager");
         pm.getMenu().add(0, 1, 0, "Déplacer vers…");
         pm.getMenu().add(0, 3, 0, "Propriétés");
+        if (isVideo || photoDelay > 0) pm.getMenu().add(0, 6, 0, isVideo ? "Relancer la vidéo" : "Relancer le compte à rebours");
         pm.getMenu().add(0, 5, 0, "Boutons et gestes");
         pm.setOnMenuItemClickListener(it -> {
-            if (it.getItemId() == 5) Guide.show(this);
+            if (it.getItemId() == 6) restart();
+            else if (it.getItemId() == 5) Guide.show(this);
             else if (it.getItemId() == 4) Share.send(this, Collections.singletonList(paths.get(index)));
             else if (it.getItemId() == 1) moveCurrent();
             else showInfo();
@@ -716,12 +776,9 @@ public class ViewerActivity extends Activity {
             public boolean onDoubleTap(MotionEvent e) {
                 if (onControls(e)) return false;
                 if (zoom > 1.01f) { resetZoom(); return true; } // photo zoomée : double-tap = taille normale
-                // côté gauche : réglage (média suivant / -10 s / rien) ; côté droit : +10 s (vidéo)
+                // chaque moitié de l'écran a son action (Réglages → Lecture → Double-tap)
                 int w = getResources().getDisplayMetrics().widthPixels;
-                if (e.getRawX() < w / 2f) {
-                    if (leftTap == 1) next();
-                    else if (leftTap == 0) skip(-10000);
-                } else skip(10000);
+                doTapAction(e.getRawX() < w / 2f ? tapLeft : tapRight);
                 return true;
             }
 

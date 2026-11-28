@@ -99,3 +99,13 @@ Nouveau réglage « Contenu de l'aléatoire » (Réglages → Lecture) : **Vidé
 ## v34 — correctif : « Vider la corbeille » qui paraissait figé
 Cause : chaque élément supprimé relisait et réécrivait tout l'index (des milliers de lignes × des milliers d'éléments), sans aucun retour à l'écran ; la galerie relisait aussi toute la corbeille sur le fil principal pour afficher le nombre d'éléments.
 Maintenant : suppression et restauration groupées (index lu et écrit une seule fois), ajout à la corbeille sans réécriture, compteur rapide, et une fenêtre de progression « Suppression… 1 200 / 20 000 » qui bloque les touches pendant l'opération.
+
+## v35 — double-tap à droite = favori
+Réglages → Lecture → « Double-tap à droite » : Avancer de 10 s (vidéo) · Favori (photo et vidéo) · **Photo : favori, vidéo : +10 s** (par défaut). Un gros cœur apparaît au centre de l'écran (rouge = ajouté, blanc = retiré).
+
+## v36 — double-tap : actions au choix, et bouton « Inverser »
+Chaque moitié de l'écran du lecteur a sa propre action (Réglages → Lecture) : aucune · média suivant · reculer de 10 s · avancer de 10 s · favori · photo : favori / vidéo : +10 s. Par défaut : gauche = média suivant, droite = photo : favori / vidéo : +10 s. La ligne **« Inverser gauche et droite »** échange les deux (ex. gauche = favori, droite = média suivant) ; il suffit ensuite de régler la droite sur « Média suivant » si besoin, ou de mettre les deux actions comme on veut.
+
+## v37 — secondes en bas, double-tap = favori ou « aller de l'avant »
+- Barre du bas : ⏮ **−10** ⏯ **+10** ⏭ · 🔀 | 🗑 (−10 et +10 seulement pour une vidéo). Le bouton ↻ est passé dans ⋮ → « Relancer la vidéo ».
+- Le double-tap ne fait plus avancer/reculer de 10 s. Il sert à : **Favori** ou **Aller de l'avant** (média suivant, ou au hasard si l'aléatoire est activé), ou rien. Par défaut : droite = favori, gauche = aller de l'avant. « Inverser gauche et droite » dans Réglages → Lecture échange les deux.
