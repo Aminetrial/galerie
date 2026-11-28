@@ -197,6 +197,7 @@ public class MediaRepo {
     /** Un fichier a changé de chemin (renommé ou déplacé). */
     public void moved(MediaItem m, String newPath) {
         version++;
+        Favorites.rename(m.path, newPath);
         m.path = newPath;
         m.id = -1; // l'ancien identifiant MediaStore n'est plus valable
     }

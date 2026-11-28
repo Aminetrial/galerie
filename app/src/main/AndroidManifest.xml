@@ -34,6 +34,11 @@
         </activity>
 
         <activity
+            android:name=".FavoritesActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <activity
             android:name=".TrashActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />

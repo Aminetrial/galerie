@@ -90,3 +90,8 @@ Depuis le sélecteur de dossiers (déplacer), « Nouveau dossier » crée désor
 
 ## v32 — contenu du mode aléatoire
 Nouveau réglage « Contenu de l'aléatoire » (Réglages → Lecture) : **Vidéos seulement**, **Photos seulement** ou **Photos et vidéos**. Appui long sur le bouton 🔀 du lecteur pour le changer à la volée (ça active aussi l'aléatoire). Il s'applique au bouton 🔀 de la galerie, à « suivant », à la fin d'une vidéo et au passage automatique ; le tirage reste sans répétition.
+
+## v33 — favoris ♥
+- Lecteur : bouton ♥ en haut (à gauche de ⋮) pour ajouter/retirer le média courant des favoris.
+- Galerie : petit ♥ rouge sur les miniatures favorites ; bouton ♥ dans la barre du haut = écran Favoris (grille, toucher ouvre le lecteur sur cette liste, appui long : retirer) ; en sélection, ⋮ → Ajouter/Retirer des favoris.
+- Les favoris sont enregistrés dans `favorites.txt` (stockage interne de l'appli) ; un déplacement ou un renommage fait suivre le favori ; un fichier mis à la corbeille puis restauré à sa place redevient favori.

@@ -68,7 +68,7 @@ public class ViewerActivity extends Activity {
     private LinearLayout topBar, bottom, seekBlock;
     private TextView title, folderView, counter, timeCur, timeTotal;
     private SeekBar seek;
-    private ImageButton restartBtn, playBtn, randomBtn;
+    private ImageButton restartBtn, playBtn, randomBtn, favBtn;
     private LinearLayout snack;
     private TextView snackText;
     private String pendingPath;
@@ -119,6 +119,7 @@ public class ViewerActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         CrashLog.start(this);
+        Favorites.init(this);
         SharedPreferences hintPrefs = getSharedPreferences("galerie", MODE_PRIVATE);
         if (!hintPrefs.getBoolean("hint_seen", false)) {
             hintPrefs.edit().putBoolean("hint_seen", true).apply();
@@ -287,6 +288,10 @@ public class ViewerActivity extends Activity {
         cg.setCornerRadius(dp(14));
         counter.setBackground(cg);
         topBar.addView(counter);
+        favBtn = ibtn(R.drawable.ic_heart, v -> toggleFavorite());
+        favBtn.setPadding(dp(11), dp(11), dp(11), dp(11));
+        favBtn.setContentDescription("Favori");
+        topBar.addView(favBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
         ImageButton more = ibtn(R.drawable.ic_more, v -> showMenu(v));
         more.setPadding(dp(11), dp(11), dp(11), dp(11));
         more.setContentDescription("Plus d'options : partager, déplacer, propriétés");
@@ -452,6 +457,25 @@ public class ViewerActivity extends Activity {
             updatePlayButton();
             return true;
         });
+    }
+
+    private void updateFavIcon() {
+        if (favBtn == null || paths == null || index < 0 || index >= paths.size()) return;
+        boolean fav = Favorites.is(paths.get(index));
+        favBtn.setImageResource(fav ? R.drawable.ic_heart_filled : R.drawable.ic_heart);
+        favBtn.setColorFilter(fav ? 0xFFFF5A6E : Color.WHITE);
+        favBtn.setContentDescription(fav ? "Retirer des favoris" : "Ajouter aux favoris");
+    }
+
+    private void toggleFavorite() {
+        boolean now = Favorites.toggle(paths.get(index));
+        updateFavIcon();
+        favBtn.animate().cancel();
+        favBtn.setScaleX(1f);
+        favBtn.setScaleY(1f);
+        favBtn.animate().scaleX(1.3f).scaleY(1.3f).setDuration(110)
+                .withEndAction(() -> favBtn.animate().scaleX(1f).scaleY(1f).setDuration(110).start()).start();
+        Toast.makeText(this, now ? "Ajouté aux favoris" : "Retiré des favoris", Toast.LENGTH_SHORT).show();
     }
 
     private void styleRandomBtn() {
@@ -771,6 +795,7 @@ public class ViewerActivity extends Activity {
         title.setText(f.getName());
         updateFolderLabel(f);
         counter.setText((i + 1) + " / " + paths.size());
+        updateFavIcon();
         final int token = ++loadToken;
         h.removeCallbacks(slideNext);
         slidePaused = false;

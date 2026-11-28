@@ -121,7 +121,7 @@ public class MainActivity extends Activity {
     private LinearLayout root;
     private FrameLayout topFrame;
     private LinearLayout normalBar, searchBar, selectBar;
-    private ImageButton backBtn, searchBtn, shuffleBtn, moreBtn;
+    private ImageButton backBtn, searchBtn, shuffleBtn, moreBtn, favTopBtn;
     private TextView titleView, subtitleView, selCount;
     private EditText searchEdit;
     private LinearLayout chipsRow;
@@ -173,6 +173,7 @@ public class MainActivity extends Activity {
         photoDelay = p.getInt("photo_delay", 0);
         randomOn = p.getBoolean("random_on", false);
         randomKind = p.getInt("random_kind", 2);
+        Favorites.init(this);
         sortMode = p.getInt("sort_mode", SORT_DATE);
         sortRev = p.getBoolean("sort_rev", false);
         if (state != null) {
@@ -335,6 +336,9 @@ public class MainActivity extends Activity {
         searchBtn = Ui.iconButton(this, R.drawable.ic_search, v -> openSearch());
         searchBtn.setContentDescription("Rechercher");
         normalBar.addView(searchBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        favTopBtn = Ui.iconButton(this, R.drawable.ic_heart, v -> startActivity(new Intent(this, FavoritesActivity.class)));
+        favTopBtn.setContentDescription("Favoris");
+        normalBar.addView(favTopBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         shuffleBtn = Ui.iconButton(this, R.drawable.ic_shuffle, v -> playRandom());
         shuffleBtn.setContentDescription("Lecture aléatoire");
         normalBar.addView(shuffleBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -919,6 +923,10 @@ public class MainActivity extends Activity {
     private void showSelectionMenu(View anchor) {
         PopupMenu pm = new PopupMenu(this, anchor);
         pm.getMenu().add(0, 3, 0, "Partager");
+        boolean allFav = true;
+        for (MediaItem m : selected) if (!Favorites.is(m.path)) { allFav = false; break; }
+        final boolean removeFav = allFav;
+        pm.getMenu().add(0, 4, 0, allFav ? "Retirer des favoris" : "Ajouter aux favoris");
         if (selected.size() == 1) pm.getMenu().add(0, 1, 0, "Renommer");
         pm.getMenu().add(0, 2, 0, "Tout sélectionner");
         pm.setOnMenuItemClickListener(it -> {
@@ -926,6 +934,13 @@ public class MainActivity extends Activity {
                 List<String> ps = new ArrayList<>();
                 for (MediaItem m : selected) ps.add(m.path);
                 Share.send(this, ps);
+            } else if (it.getItemId() == 4) {
+                List<String> ps = new ArrayList<>();
+                for (MediaItem m : selected) ps.add(m.path);
+                if (removeFav) Favorites.removeAll(ps); else Favorites.addAll(ps);
+                toast(removeFav ? "Retiré des favoris" : "Ajouté aux favoris");
+                endSelection();
+                adapter.notifyDataSetChanged();
             } else if (it.getItemId() == 1) renameSelected();
             else {
                 selected.addAll(visibleMedia);
@@ -1501,6 +1516,7 @@ public class MainActivity extends Activity {
     private static class MediaVH extends RecyclerView.ViewHolder {
         ImageView image;
         TextView badge, check;
+        ImageView fav;
         View dim;
         MediaVH(View v) { super(v); }
     }
@@ -1607,6 +1623,14 @@ public class MainActivity extends Activity {
             FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.TOP | Gravity.START);
             cl.setMargins(dp(6), dp(6), 0, 0);
             sq.addView(vh.check, cl);
+            vh.fav = new ImageView(MainActivity.this);
+            vh.fav.setImageResource(R.drawable.ic_heart_filled);
+            vh.fav.setColorFilter(0xFFFF5A6E);
+            vh.fav.setBackground(Ui.rect(MainActivity.this, 0x66000000, 10));
+            vh.fav.setPadding(dp(3), dp(3), dp(3), dp(3));
+            FrameLayout.LayoutParams fl = new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.TOP | Gravity.END);
+            fl.setMargins(0, dp(6), dp(6), 0);
+            sq.addView(vh.fav, fl);
             sq.setOnClickListener(v -> {
                 int p = vh.getBindingAdapterPosition();
                 if (p < 0 || p >= rows.size()) return;
@@ -1652,6 +1676,7 @@ public class MainActivity extends Activity {
                     vh.badge.setVisibility(View.VISIBLE);
                     vh.badge.setText(m.duration > 0 ? "▶ " + FileUtil.formatTime((int) m.duration) : "▶");
                 } else vh.badge.setVisibility(View.GONE);
+                vh.fav.setVisibility(Favorites.is(m.path) ? View.VISIBLE : View.GONE);
                 boolean sel = selected.contains(m);
                 vh.dim.setVisibility(sel ? View.VISIBLE : View.GONE);
                 if (selecting) {
