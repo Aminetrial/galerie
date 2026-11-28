@@ -109,3 +109,6 @@ Chaque moitié de l'écran du lecteur a sa propre action (Réglages → Lecture)
 ## v37 — secondes en bas, double-tap = favori ou « aller de l'avant »
 - Barre du bas : ⏮ **−10** ⏯ **+10** ⏭ · 🔀 | 🗑 (−10 et +10 seulement pour une vidéo). Le bouton ↻ est passé dans ⋮ → « Relancer la vidéo ».
 - Le double-tap ne fait plus avancer/reculer de 10 s. Il sert à : **Favori** ou **Aller de l'avant** (média suivant, ou au hasard si l'aléatoire est activé), ou rien. Par défaut : droite = favori, gauche = aller de l'avant. « Inverser gauche et droite » dans Réglages → Lecture échange les deux.
+
+## v38 — barre du bas centrée
+🔀 à gauche, ⏮ −10 ⏯ +10 ⏭ au centre de l'écran, 🗑 à droite (🗑 n'est plus collée à 🔀).

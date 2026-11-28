@@ -369,20 +369,19 @@ public class ViewerActivity extends Activity {
         delBg.setColor(0x2EFF5C5C);
         delBtn.setBackground(delBg);
 
-        // ⏮  −10  ⏯  +10  ⏭   (−10 / +10 seulement pour une vidéo)
+        // 🔀 à gauche · ⏮ −10 ⏯ +10 ⏭ au centre · 🗑 à droite (−10 / +10 seulement pour une vidéo)
+        // 🔀 et 🗑 occupent la même largeur (44 dp) : le groupe du milieu est centré sur l'écran
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(dp(38), dp(38));
+        rl.leftMargin = dp(3);
+        rl.rightMargin = dp(3);
+        pill.addView(randomBtn, rl);
+        pill.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
         pill.addView(prevBtn, new LinearLayout.LayoutParams(dp(42), dp(44)));
         pill.addView(back10Btn, new LinearLayout.LayoutParams(dp(40), dp(40)));
         pill.addView(playBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
         pill.addView(fwd10Btn, new LinearLayout.LayoutParams(dp(40), dp(40)));
         pill.addView(nextBtn, new LinearLayout.LayoutParams(dp(42), dp(44)));
         pill.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
-        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(dp(38), dp(38));
-        rl.rightMargin = dp(2);
-        pill.addView(randomBtn, rl);
-        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(dp(1), dp(20));
-        dl.leftMargin = dp(4);
-        dl.rightMargin = dp(6);
-        pill.addView(divider(), dl);
         pill.addView(delBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
         bottom.addView(pill, new LinearLayout.LayoutParams(-1, -2));
         root.addView(bottom, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
