@@ -148,16 +148,78 @@ public final class Trash {
         long size = src.length();
         boolean ok = src.renameTo(dst) || FileUtil.copyThenDelete(src, dst);
         if (!ok) return false;
-        List<Entry> list = readIndex(d);
-        Entry e = new Entry();
-        e.name = dst.getName();
-        e.orig = clean(src.getAbsolutePath());
-        e.deleted = System.currentTimeMillis();
-        e.size = size;
-        e.file = dst;
-        list.add(e);
-        writeIndex(d, list);
+        // ajout en fin de fichier : pas de relecture ni de réécriture de tout l'index (rapide même avec des milliers d'éléments)
+        try (Writer w = new OutputStreamWriter(new FileOutputStream(new File(d, INDEX), true), StandardCharsets.UTF_8)) {
+            w.write(dst.getName() + "\t" + clean(src.getAbsolutePath()) + "\t" + System.currentTimeMillis() + "\t" + size + "\n");
+        } catch (IOException ex) {
+            // le fichier est bien dans la corbeille mais sans index : il sera ignoré ; on le remet
+            if (!dst.renameTo(src)) FileUtil.copyThenDelete(dst, src);
+            return false;
+        }
         return true;
+    }
+
+    /** Suivi d'une opération longue (appelé sur le fil de l'opération, pas sur le fil principal). */
+    public interface Progress {
+        void step(int done, int total);
+    }
+
+    /** Nombre d'éléments d'après l'index, sans vérifier les fichiers un par un (rapide, sans verrou). */
+    public static int countFast() {
+        File idx = new File(new File(Environment.getExternalStorageDirectory(), ".Galerie-corbeille"), INDEX);
+        if (!idx.isFile()) return 0;
+        int n = 0;
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(idx), StandardCharsets.UTF_8))) {
+            while (r.readLine() != null) n++;
+        } catch (IOException ignored) { }
+        return n;
+    }
+
+    /** Supprime définitivement plusieurs éléments en lisant et écrivant l'index une seule fois. Renvoie le nombre effacé. */
+    public static synchronized int deleteForever(List<Entry> es, Progress pr) {
+        File d = dir();
+        java.util.Set<String> gone = new java.util.HashSet<>();
+        int total = es.size(), i = 0;
+        for (Entry e : es) {
+            File f = new File(d, e.name);
+            if (!f.exists() || f.delete()) gone.add(e.name);
+            i++;
+            if (pr != null && (i % 20 == 0 || i == total)) pr.step(i, total);
+        }
+        if (!gone.isEmpty()) {
+            List<Entry> keep = new ArrayList<>();
+            for (Entry e : readIndex(d)) if (!gone.contains(e.name)) keep.add(e);
+            writeIndex(d, keep);
+        }
+        return gone.size();
+    }
+
+    /** Restaure plusieurs éléments (index lu et écrit une seule fois). Renvoie les fichiers restaurés. */
+    public static synchronized List<File> restore(List<Entry> es, Progress pr) {
+        File d = dir();
+        java.util.Set<String> done = new java.util.HashSet<>();
+        List<File> out = new ArrayList<>();
+        int total = es.size(), i = 0;
+        for (Entry e : es) {
+            i++;
+            File target = new File(e.orig);
+            File parent = target.getParentFile();
+            File src = new File(d, e.name);
+            if (parent != null && src.isFile() && (parent.isDirectory() || parent.mkdirs())) {
+                File dst = FileUtil.uniqueFile(parent, target.getName());
+                if (src.renameTo(dst) || FileUtil.copyThenDelete(src, dst)) {
+                    done.add(e.name);
+                    out.add(dst);
+                }
+            }
+            if (pr != null && (i % 20 == 0 || i == total)) pr.step(i, total);
+        }
+        if (!done.isEmpty()) {
+            List<Entry> keep = new ArrayList<>();
+            for (Entry e : readIndex(d)) if (!done.contains(e.name)) keep.add(e);
+            writeIndex(d, keep);
+        }
+        return out;
     }
 
     /** Remet un élément à son emplacement d'origine (nom modifié s'il existe déjà). Renvoie le fichier restauré, ou null. */

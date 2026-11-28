@@ -702,7 +702,7 @@ public class MainActivity extends Activity {
     }
 
     private String trashSummary() {
-        int n = Trash.count();
+        int n = Trash.countFast();
         return (n == 0 ? "Vide" : n + (n > 1 ? " éléments" : " élément"))
                 + " · les éléments supprimés y restent 30 jours, puis sont effacés définitivement.";
     }

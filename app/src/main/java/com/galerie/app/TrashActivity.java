@@ -54,6 +54,8 @@ public class TrashActivity extends Activity {
     private Button restoreBtn, deleteBtn;
     private ImageView backBtn;
     private boolean busy = false;
+    private LinearLayout busyView;
+    private TextView busyText;
 
     private int dp(int v) { return Ui.dp(this, v); }
 
@@ -135,6 +137,21 @@ public class TrashActivity extends Activity {
         emptyView.setGravity(Gravity.CENTER);
         emptyView.setVisibility(View.GONE);
         content.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
+        busyView = new LinearLayout(this);
+        busyView.setOrientation(LinearLayout.VERTICAL);
+        busyView.setGravity(Gravity.CENTER);
+        busyView.setBackgroundColor(0xE60F1115);
+        busyView.setClickable(true); // bloque les touches pendant l'opération
+        android.widget.ProgressBar pb = new android.widget.ProgressBar(this);
+        busyView.addView(pb, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        busyText = new TextView(this);
+        busyText.setTextColor(Ui.TEXT);
+        busyText.setTextSize(15);
+        busyText.setGravity(Gravity.CENTER);
+        busyText.setPadding(dp(24), dp(16), dp(24), 0);
+        busyView.addView(busyText);
+        busyView.setVisibility(View.GONE);
+        content.addView(busyView, new FrameLayout.LayoutParams(-1, -1));
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
 
         // --- actions (visibles quand quelque chose est sélectionné)
@@ -320,27 +337,36 @@ public class TrashActivity extends Activity {
 
     // ------------------------------------------------------------------ actions
 
+    private void showBusy(String text) {
+        busy = true;
+        busyText.setText(text);
+        busyView.setVisibility(View.VISIBLE);
+    }
+
+    private void hideBusy() {
+        busy = false;
+        busyView.setVisibility(View.GONE);
+    }
+
     private void restoreSelected() {
         final List<Trash.Entry> chosen = selected();
         if (chosen.isEmpty() || busy) return;
-        busy = true;
-        Toast.makeText(this, "Restauration…", Toast.LENGTH_SHORT).show();
+        showBusy("Restauration…");
         bg.execute(() -> {
-            final List<String> paths = new ArrayList<>();
-            int failed = 0;
-            for (Trash.Entry e : chosen) {
-                File f = Trash.restore(e);
-                if (f != null) paths.add(f.getAbsolutePath()); else failed++;
-            }
-            if (!paths.isEmpty()) {
+            final List<File> out = Trash.restore(chosen, (done, total) ->
+                    h.post(() -> busyText.setText("Restauration… " + done + " / " + total)));
+            if (!out.isEmpty()) {
+                final List<String> paths = new ArrayList<>();
+                for (File f : out) paths.add(f.getAbsolutePath());
+                h.post(() -> busyText.setText("Mise à jour de la galerie…"));
                 final CountDownLatch latch = new CountDownLatch(paths.size());
                 MediaScannerConnection.scanFile(getApplicationContext(), paths.toArray(new String[0]), null,
                         (p, u) -> latch.countDown());
                 try { latch.await(10, TimeUnit.SECONDS); } catch (InterruptedException ignored) { }
             }
-            final int ok = paths.size(), bad = failed;
+            final int ok = out.size(), bad = chosen.size() - out.size();
             h.post(() -> {
-                busy = false;
+                hideBusy();
                 sel.clear();
                 if (ok > 0) {
                     MediaRepo.get().loaded = false; // la galerie se relit à son retour
@@ -366,13 +392,12 @@ public class TrashActivity extends Activity {
                 .setMessage(n + (n > 1 ? " éléments seront supprimés" : " élément sera supprimé")
                         + " définitivement. Cette action est irréversible.")
                 .setPositiveButton(all ? "Vider" : "Supprimer", (d, w) -> {
-                    busy = true;
+                    showBusy("Suppression…");
                     bg.execute(() -> {
-                        int ok = 0;
-                        for (Trash.Entry e : chosen) if (Trash.deleteForever(e)) ok++;
-                        final int done = ok;
+                        final int done = Trash.deleteForever(chosen, (i, total) ->
+                                h.post(() -> busyText.setText("Suppression… " + i + " / " + total)));
                         h.post(() -> {
-                            busy = false;
+                            hideBusy();
                             sel.clear();
                             Toast.makeText(this, done + (done > 1 ? " éléments supprimés" : " élément supprimé"), Toast.LENGTH_SHORT).show();
                             load();

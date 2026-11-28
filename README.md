@@ -95,3 +95,7 @@ Nouveau réglage « Contenu de l'aléatoire » (Réglages → Lecture) : **Vidé
 - Lecteur : bouton ♥ en haut (à gauche de ⋮) pour ajouter/retirer le média courant des favoris.
 - Galerie : petit ♥ rouge sur les miniatures favorites ; bouton ♥ dans la barre du haut = écran Favoris (grille, toucher ouvre le lecteur sur cette liste, appui long : retirer) ; en sélection, ⋮ → Ajouter/Retirer des favoris.
 - Les favoris sont enregistrés dans `favorites.txt` (stockage interne de l'appli) ; un déplacement ou un renommage fait suivre le favori ; un fichier mis à la corbeille puis restauré à sa place redevient favori.
+
+## v34 — correctif : « Vider la corbeille » qui paraissait figé
+Cause : chaque élément supprimé relisait et réécrivait tout l'index (des milliers de lignes × des milliers d'éléments), sans aucun retour à l'écran ; la galerie relisait aussi toute la corbeille sur le fil principal pour afficher le nombre d'éléments.
+Maintenant : suppression et restauration groupées (index lu et écrit une seule fois), ajout à la corbeille sans réécriture, compteur rapide, et une fenêtre de progression « Suppression… 1 200 / 20 000 » qui bloque les touches pendant l'opération.
